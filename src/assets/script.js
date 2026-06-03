@@ -24,6 +24,7 @@ window.addEventListener('load', () => {
     const resetBtn = document.getElementById('resetBtn');
     const nextGenerationBtn = document.getElementById('nextGenerationBtn');
     const toroidalCheck = document.getElementById('toroidalCheck');
+    const showPathCheck = document.getElementById('showPathCheck');
     const speedInput = document.getElementById('speedInput');
     
     const countReinas = document.getElementById('countReinas');
@@ -41,6 +42,9 @@ window.addEventListener('load', () => {
     let grid = []; // 0 = blanco (no visitado), 1 = negro (visitado)
     let ants = [];
     let generation = 0;
+    let deaths = 0;
+    let births = 0;
+    let conflicts = 0;
     let isRunning = false;
     let speed = parseInt(speedInput.value);
     let animationId = null;
@@ -60,10 +64,44 @@ window.addEventListener('load', () => {
         [ANT_TYPES.SOLDADO]: '#00FF00'
     };
 
+    // Precarga y Colorización del SVG
+    let antImages = {};
+    let svgsLoaded = false;
+    const baseAntImg = new Image();
+    baseAntImg.src = '/src/assets/Hormiga.svg'; // Ruta absoluta del servidor de Vite
+    
+    baseAntImg.onload = () => {
+        for (const type of Object.values(ANT_TYPES)) {
+            const color = ANT_COLORS[type];
+            const tCanvas = document.createElement('canvas');
+            tCanvas.width = 128; // Resolución interna
+            tCanvas.height = 128;
+            const tCtx = tCanvas.getContext('2d');
+            
+            // Dibujar la silueta original
+            tCtx.drawImage(baseAntImg, 0, 0, 128, 128);
+            
+            // Aplicar tinte de color usando source-in (reemplaza píxeles no transparentes)
+            tCtx.globalCompositeOperation = 'source-in';
+            tCtx.fillStyle = color;
+            tCtx.fillRect(0, 0, 128, 128);
+            
+            antImages[type] = tCanvas;
+        }
+        svgsLoaded = true;
+        drawAll(); // Redibujar si ya había algo
+    };
+
     function initGrid() {
         grid = new Array(rows).fill(0).map(() => new Array(cols).fill(0));
         ants = [];
         generation = 0;
+        deaths = 0;
+        births = 0;
+        conflicts = 0;
+        document.getElementById('countDecesos').innerText = deaths;
+        document.getElementById('countNacimientos').innerText = births;
+        document.getElementById('countConflictos').innerText = conflicts;
         updateStats();
         resizeCanvas();
         drawAll();
@@ -95,11 +133,13 @@ window.addEventListener('load', () => {
 
         // Dibujar el estado de las celdas en segundo plano
         // (Las etiquetas 0 y 1 no se muestran, solo su efecto visual)
-        ctx.fillStyle = '#f8fafc'; // Color para estado '1' (como negro en la regla original)
-        for(let y = 0; y < rows; y++) {
-            for(let x = 0; x < cols; x++) {
-                if(grid[y][x] === 1) {
-                    ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+        if (!showPathCheck || showPathCheck.checked) {
+            ctx.fillStyle = '#f8fafc'; // Color para estado '1' (como negro en la regla original)
+            for(let y = 0; y < rows; y++) {
+                for(let x = 0; x < cols; x++) {
+                    if(grid[y][x] === 1) {
+                        ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+                    }
                 }
             }
         }
@@ -107,8 +147,24 @@ window.addEventListener('load', () => {
         // Dibujar las hormigas por encima de las celdas
         for(const ant of ants) {
             if(!ant.alive) continue;
-            ctx.fillStyle = ant.color;
-            ctx.fillRect(ant.x * cellSize + 1, ant.y * cellSize + 1, cellSize - 2, cellSize - 2);
+            
+            if (svgsLoaded && antImages[ant.type]) {
+                ctx.save();
+                // Trasladar al centro de la celda
+                ctx.translate(ant.x * cellSize + cellSize / 2, ant.y * cellSize + cellSize / 2);
+                
+                // Rotar según la dirección: 0=Arriba, 1=Derecha, 2=Abajo, 3=Izquierda
+                // Compensamos -45 grados (-Math.PI / 4) porque el SVG base apunta a la esquina superior derecha
+                ctx.rotate(ant.dir * Math.PI / 2 - Math.PI / 4);
+                
+                // Dibujar centrado
+                ctx.drawImage(antImages[ant.type], -cellSize / 2, -cellSize / 2, cellSize, cellSize);
+                ctx.restore();
+            } else {
+                // Fallback a cuadrados
+                ctx.fillStyle = ant.color;
+                ctx.fillRect(ant.x * cellSize + 1, ant.y * cellSize + 1, cellSize - 2, cellSize - 2);
+            }
         }
     }
 
@@ -199,53 +255,180 @@ window.addEventListener('load', () => {
         countTrabajadoras.innerText = nTrab;
         countReproductoras.innerText = nRep;
         countSoldados.innerText = nSold;
+
+        const totalCells = rows * cols;
+        const density = totalCells > 0 ? ((nAlive / totalCells) * 100).toFixed(2) : 0;
+        const densityElement = document.getElementById('densityStat');
+        if (densityElement) densityElement.innerText = density + '%';
+
+        const ratio = deaths > 0 ? (births / deaths).toFixed(2) : (births > 0 ? "Inf" : "1.00");
+        const ratioElement = document.getElementById('ratioStat');
+        if (ratioElement) ratioElement.innerText = ratio;
     }
 
     function step() {
         const isToroidal = toroidalCheck.checked;
+
+        // Probabilidades de Nacimiento
+        const inputNacReina = document.getElementById('inputNacReina');
+        const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+        const inputNacReproductora = document.getElementById('inputNacReproductora');
+        const inputNacSoldado = document.getElementById('inputNacSoldado');
         
-        for(const ant of ants) {
+        let pNacReina = inputNacReina ? parseFloat(inputNacReina.value) : 1;
+        let pNacTrab = inputNacTrabajadora ? parseFloat(inputNacTrabajadora.value) : 55;
+        let pNacRep = inputNacReproductora ? parseFloat(inputNacReproductora.value) : 9;
+        let pNacSold = inputNacSoldado ? parseFloat(inputNacSoldado.value) : 35;
+        
+        const totalP = pNacReina + pNacTrab + pNacRep + pNacSold;
+        if (totalP > 0) { pNacReina /= totalP; pNacTrab /= totalP; pNacRep /= totalP; pNacSold /= totalP; } 
+        else { pNacReina = 0.01; pNacTrab = 0.55; pNacRep = 0.09; pNacSold = 0.35; }
+        
+        const birthProbs = [
+            { type: ANT_TYPES.REINA, prob: pNacReina },
+            { type: ANT_TYPES.TRABAJADORA, prob: pNacTrab },
+            { type: ANT_TYPES.REPRODUCTORA, prob: pNacRep },
+            { type: ANT_TYPES.SOLDADO, prob: pNacSold }
+        ];
+
+        function getBirthType() {
+            let r = Math.random();
+            let cum = 0;
+            for(let bp of birthProbs) {
+                cum += bp.prob;
+                if(r <= cum) return bp.type;
+            }
+            return ANT_TYPES.TRABAJADORA;
+        }
+
+        function getNextPos(x, y, dir) {
+            let nx = x, ny = y;
+            if(dir === 0) ny--; else if(dir === 1) nx++; else if(dir === 2) ny++; else if(dir === 3) nx--;
+            if(isToroidal) {
+                if(nx < 0) nx = cols - 1; else if(nx >= cols) nx = 0;
+                if(ny < 0) ny = rows - 1; else if(ny >= rows) ny = 0;
+            } else {
+                if(nx < 0) nx = 0; else if(nx >= cols) nx = cols - 1;
+                if(ny < 0) ny = 0; else if(ny >= rows) ny = rows - 1;
+            }
+            return {nx, ny};
+        }
+        
+        // Iteramos las hormigas
+        // Para evitar problemas modificando el array, iteramos por índice actual
+        const numAnts = ants.length;
+        for(let i = 0; i < numAnts; i++) {
+            const ant = ants[i];
             if(!ant.alive) continue;
             
-            // Regla de Langton Clásica
-            const state = grid[ant.y][ant.x];
-            
-            // 0 = Blanco -> Gira a la derecha (Dir + 1)
-            // 1 = Negro -> Gira a la izquierda (Dir + 3)
-            if(state === 0) {
-                ant.dir = (ant.dir + 1) % 4; 
-            } else {
-                ant.dir = (ant.dir + 3) % 4;
+            // 1. Envejecimiento
+            ant.age++;
+            if(ant.age >= 80) {
+                ant.alive = false;
+                deaths++;
+                continue;
             }
             
-            // Invertir estado de la celda
-            grid[ant.y][ant.x] = 1 - state;
+            // 2. Regla de Langton Clásica (dirección intencionada)
+            const state = grid[ant.y][ant.x];
+            let intendedDir = state === 0 ? (ant.dir + 1) % 4 : (ant.dir + 3) % 4;
             
-            // Avanzar en la dirección actual
-            if(ant.dir === 0) ant.y--;      // Arriba
-            else if(ant.dir === 1) ant.x++; // Derecha
-            else if(ant.dir === 2) ant.y++; // Abajo
-            else if(ant.dir === 3) ant.x--; // Izquierda
+            let pos = getNextPos(ant.x, ant.y, intendedDir);
+            let nextX = pos.nx;
+            let nextY = pos.ny;
             
-            // Validar límites del mundo
-            if(isToroidal) {
-                if(ant.x < 0) ant.x = cols - 1;
-                else if(ant.x >= cols) ant.x = 0;
+            // 3. Detección de Colisiones (Celda Ocupada)
+            let occupantIndex = ants.findIndex((a, idx) => a.alive && a.x === nextX && a.y === nextY && idx !== i);
+            let moved = true;
+            
+            if (occupantIndex !== -1) {
+                conflicts++;
+                let occupant = ants[occupantIndex];
+                moved = false; // Asumimos que no puede moverse directo a menos que resolvamos
                 
-                if(ant.y < 0) ant.y = rows - 1;
-                else if(ant.y >= rows) ant.y = 0;
-            } else {
-                if(ant.x < 0) ant.x = 0;
-                else if(ant.x >= cols) ant.x = cols - 1;
-                
-                if(ant.y < 0) ant.y = 0;
-                else if(ant.y >= rows) ant.y = rows - 1;
+                // Regla especial: Encuentro de Reinas
+                if(ant.type === ANT_TYPES.REINA && occupant.type === ANT_TYPES.REINA) {
+                    if(ant.age <= 60 && occupant.age <= 60) {
+                        if(Math.random() < 0.5) { ant.alive = false; deaths++; }
+                        if(Math.random() < 0.5) { occupant.alive = false; deaths++; }
+                    } else {
+                        if(ant.age > 60) { if(Math.random() < 0.8) { ant.alive = false; deaths++; } }
+                        else { if(Math.random() < 0.5) { ant.alive = false; deaths++; } }
+                        
+                        if(occupant.age > 60) { if(Math.random() < 0.8) { occupant.alive = false; deaths++; } }
+                        else { if(Math.random() < 0.5) { occupant.alive = false; deaths++; } }
+                    }
+                } 
+                // Regla especial: Nacimiento (Reina + Reproductora a 180°)
+                else if ( (ant.type === ANT_TYPES.REINA && occupant.type === ANT_TYPES.REPRODUCTORA) ||
+                          (ant.type === ANT_TYPES.REPRODUCTORA && occupant.type === ANT_TYPES.REINA) ) {
+                    // Verificamos si están frente a frente (diferencia de dir de 2)
+                    if (Math.abs(intendedDir - occupant.dir) === 2 || Math.abs(ant.dir - occupant.dir) === 2) {
+                        let newType = getBirthType();
+                        // Encontrar celda adyacente libre
+                        let freeDirs = [0,1,2,3].filter(d => {
+                            let p = getNextPos(ant.x, ant.y, d);
+                            return !ants.some(a => a.alive && a.x === p.nx && a.y === p.ny);
+                        });
+                        if (freeDirs.length > 0) {
+                            let bDir = freeDirs[Math.floor(Math.random()*freeDirs.length)];
+                            let bPos = getNextPos(ant.x, ant.y, bDir);
+                            ants.push({
+                                x: bPos.nx, y: bPos.ny,
+                                type: newType, color: ANT_COLORS[newType],
+                                dir: Math.floor(Math.random() * 4),
+                                age: 0, alive: true
+                            });
+                            births++;
+                        }
+                    }
+                }
+
+                // Resolver movimiento (giro aleatorio)
+                if (ant.alive) {
+                    let otherDirs = [0, 1, 2, 3].filter(d => d !== intendedDir);
+                    let randomDir = otherDirs[Math.floor(Math.random() * 3)];
+                    let altPos = getNextPos(ant.x, ant.y, randomDir);
+                    
+                    let altOccupied = ants.some((a, idx) => a.alive && a.x === altPos.nx && a.y === altPos.ny && idx !== i);
+                    
+                    if (altOccupied) {
+                        // Esperar un paso (pierde turno, no invierte color ni se mueve)
+                        moved = false; 
+                    } else {
+                        // Se mueve a la alternativa
+                        intendedDir = randomDir;
+                        nextX = altPos.nx;
+                        nextY = altPos.ny;
+                        moved = true;
+                    }
+                }
+            }
+            
+            if (moved && ant.alive) {
+                // Aplicar cambio de grid y movimiento
+                grid[ant.y][ant.x] = 1 - state; // invertir estado actual
+                ant.dir = intendedDir;
+                ant.x = nextX;
+                ant.y = nextY;
             }
         }
         
+        document.getElementById('countDecesos').innerText = deaths;
+        document.getElementById('countNacimientos').innerText = births;
+        document.getElementById('countConflictos').innerText = conflicts;
+        
         generation++;
-        generationCounter.innerText = generation;
-        drawAll(); // Redibujar una vez que todas las hormigas se movieron para evitar parpadeos
+        updateStats(); // To update counters
+        drawAll(); // Redibujar
+        
+        // Auto-pausa si se extinguen
+        let nAliveStr = document.getElementById('aliveCounter').innerText;
+        if (parseInt(nAliveStr) === 0 && generation > 0) {
+            isRunning = false;
+            document.getElementById('toggleGame').innerText = "Iniciar";
+            cancelAnimationFrame(animationId);
+        }
     }
 
     function loop(timestamp) {
@@ -329,6 +512,8 @@ window.addEventListener('load', () => {
     let drawStartX = -1;
     let drawStartY = -1;
 
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
     canvas.addEventListener('mousedown', (e) => {
         isDrawing = true;
         handleManualInput(e);
@@ -353,6 +538,18 @@ window.addEventListener('load', () => {
             drawStartX = x;
             drawStartY = y;
 
+            const isRightClick = e.buttons === 2 || e.button === 2;
+            const existingAntIndex = ants.findIndex(a => a.x === x && a.y === y && a.alive);
+            
+            if (isRightClick) {
+                if (existingAntIndex !== -1) {
+                    ants[existingAntIndex].alive = false;
+                    updateStats();
+                    drawAll();
+                }
+                return;
+            }
+
             const brushValue = currentBrushValue;
             
             if(brushValue === "celda") {
@@ -360,11 +557,18 @@ window.addEventListener('load', () => {
                 grid[y][x] = 1 - grid[y][x];
                 drawAll();
             } else {
-                // Insertar hormiga seleccionada
-                const type = parseInt(brushValue);
-                // Si la celda está vacía de hormigas, permitimos colocar una
-                const existingAnt = ants.find(a => a.x === x && a.y === y && a.alive);
-                if (!existingAnt) {
+                if (existingAntIndex !== -1) {
+                    // Ciclar el tipo de la hormiga si se hace clic nuevamente sobre ella (solo en mousedown para no ciclar rápido)
+                    if (e.type === 'mousedown') {
+                        let ant = ants[existingAntIndex];
+                        ant.type = (ant.type + 1) % 4;
+                        ant.color = ANT_COLORS[ant.type];
+                        updateStats();
+                        drawAll();
+                    }
+                } else {
+                    // Insertar hormiga seleccionada
+                    const type = parseInt(brushValue);
                     ants.push({
                         x, y,
                         type: type,
@@ -382,4 +586,8 @@ window.addEventListener('load', () => {
 
     // Arranque inicial
     initGrid();
+    
+    if (showPathCheck) {
+        showPathCheck.addEventListener('change', drawAll);
+    }
 });
