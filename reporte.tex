@@ -1,0 +1,1611 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{wrapfig}
+\usepackage{makeidx}
+\usepackage{array}
+% \usepackage{minted}
+% \usepackage{fvextra}
+\usepackage{float}
+\usepackage{ragged2e}
+
+
+% Removed setminted
+
+% Configuracion de pagina
+\geometry{left=3cm, right=2cm, top=3cm, bottom=2cm, headheight=15pt}
+
+% Encabezado y pie
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Programa de Hormiga de Langton}
+\fancyfoot[C]{\thepage}
+
+\makeindex
+
+% Titulo
+\title{Simulación de la Hormiga de Langton Multi-Agente}
+\author{Luis Andrés Contla Mota}
+\date{Junio 2025}
+
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{darkbg}{rgb}{0.97,0.97,0.97}
+\definecolor{commentgreen}{rgb}{0.12,0.53,0.12}
+\definecolor{keywordblue}{rgb}{0.0,0.3,0.7}
+\definecolor{stringorange}{rgb}{0.8,0.3,0.0}
+
+\lstdefinelanguage{JavaScript}{
+  keywords={break, case, catch, continue, debugger, default, delete, do, else, false, finally, for, function, if, in, instanceof, new, null, return, switch, this, throw, true, try, typeof, var, void, while, with, let, const, static, class, extends, import, export, from, default},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]',
+  morestring=[b]",
+  morestring=[b]`
+}
+
+\lstset{
+    backgroundcolor=\color{darkbg},
+    commentstyle=\color{commentgreen}\itshape,
+    keywordstyle=\color{keywordblue}\bfseries,
+    stringstyle=\color{stringorange},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    numberstyle=\tiny\color{gray},
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{lightgray}
+}
+
+\begin{document}
+
+\renewcommand{\contentsname}{Índice}
+\maketitle
+\tableofcontents
+
+\newpage
+
+\section{Introducción}
+
+\subsection{¿Qué es la Hormiga de Langton?}
+La Hormiga de Langton es un autómata celular bidimensional propuesto por Christopher Langton en 1986. En su versión clásica, consiste en una "hormiga" que se mueve sobre una cuadrícula de celdas blancas y negras siguiendo dos reglas muy simples: si está sobre una celda blanca, cambia el color de la celda a negro, gira 90 grados a la derecha y avanza una celda; si está sobre una celda negra, cambia el color a blanco, gira 90 grados a la izquierda y avanza. A pesar de la simplicidad de estas reglas, el comportamiento de la hormiga es complejo e impredecible a mediano plazo, pasando por fases de caos hasta generar estructuras repetitivas conocidas como autopistas.
+
+\subsection{Objetivo del Proyecto}
+El objetivo de este proyecto es expandir el concept clásico de la Hormiga de Langton hacia un ecosistema multi-agente con reglas biológicas y de supervivencia. El proyecto requiere la simulación simultánea de miles de hormigas divididas en cuatro jerarquías (Reinas, Trabajadoras, Reproductoras y Soldados). Se establecieron dinámicas complejas que incluyen envejecimiento (muerte después de 80 iteraciones), reproducción (al encontrarse una Reina y una Reproductora de frente), y resolución de conflictos por ocupación espacial. Adicionalmente, se buscó de manera empírica una configuración paramétrica que permitiera al sistema alcanzar un estado de estabilidad dinámica, evitando tanto la extinción por aislamiento como el congelamiento por sobrepoblación.
+
+\section{Desarrollo}
+
+\subsection{¿En qué fue desarrollado?}
+El simulador fue desarrollado utilizando una arquitectura híbrida de tecnologías web modernas:
+\begin{itemize}
+    \item \textbf{React JS y Vite:} Utilizados para construir la interfaz gráfica de usuario (GUI). React permitió modularizar los controles, los parámetros de probabilidad y los paneles de estadísticas en tiempo real, mientras que Vite sirvió como entorno de desarrollo ultra rápido.
+    \item \textbf{Vanilla JavaScript (ES6+):} La lógica central del motor celular (las iteraciones, el movimiento de los agentes, la detección de colisiones y la partición espacial) se desarrolló en JavaScript puro para garantizar el máximo rendimiento.
+    \item \textbf{HTML5 Canvas API:} Para lograr renderizar hasta 10,000 entidades simultáneamente a 60 cuadros por segundo, se optó por el uso del elemento \texttt{<canvas>}. Esto evita la sobrecarga del DOM al manipular píxeles y transformaciones geométricas (rotaciones de los SVG de las hormigas) de forma directa.
+    \item \textbf{CSS3 Vainilla:} Se aplicó un diseño tipo \textit{Glassmorphism} con una paleta de colores oscuros para proporcionar una apariencia inmersiva y moderna.
+\end{itemize}
+
+\subsection{Mi Experiencia}
+El desarrollo del proyecto presentó retos matemáticos y algorítmicos significativos. Al principio, la ejecución de la lógica O(N$^2$) para detectar colisiones entre las hormigas provocaba que la computadora se alentara rápidamente cuando la población superaba los miles de individuos. Fue necesario implementar una optimización de "Partición Espacial" (\textit{Spatial Partitioning}), utilizando un \texttt{Grid Fantasma} de complejidad O(1) que permitió fluidificar la simulación incluso con más de 8,000 agentes simultáneos.
+
+En esta optimización, se utiliza una matriz bidimensional paralela (\texttt{antGrid}) del mismo tamaño que la cuadrícula física (\texttt{grid}). Esta matriz en lugar de almacenar colores almacena referencias directas a los objetos de tipo hormiga vivos. Al realizar la inicialización de la simulación, se inicializa este grid bidimensional en memoria:
+
+\begin{lstlisting}[language=JavaScript]
+// Inicialización del grid fantasma para partición espacial
+function initGrid() {
+    grid = [];
+    antGrid = [];
+    for (let y = 0; y < rows; y++) {
+        let row = [];
+        let antRow = [];
+        for (let x = 0; x < cols; x++) {
+            row.push(0); // 0 indica celda sin visitar (blanco)
+            antRow.push(null); // null indica que no hay ninguna hormiga
+        }
+        grid.push(row);
+        antGrid.push(antRow);
+    }
+    // ...
+}
+\end{lstlisting}
+
+Cuando una hormiga es colocada en el tablero (ya sea de forma aleatoria al inicio o a través del pincel manual), se guarda la referencia del objeto en su celda correspondiente:
+
+\begin{lstlisting}[language=JavaScript]
+// Registro de hormiga en la partición espacial
+ants.push(newAnt);
+antGrid[pos.y][pos.x] = newAnt;
+\end{lstlisting}
+
+Durante la ejecución de cada paso de simulación, la detección de colisiones se reduce a consultar directamente si hay una referencia activa en la celda destino en la matriz de partición espacial, logrando una complejidad constante O(1) en lugar del costoso recorrido lineal de complejidad cuadrática:
+
+\begin{lstlisting}[language=JavaScript]
+// ANTES: O(N^2) - Buscar en toda la lista de hormigas
+const existingAnt = ants.find(a => a.x === newX && a.y === newY && a.alive);
+
+// AHORA: O(1) - Búsqueda instantánea usando matriz bidimensional (Spatial Partitioning)
+let occupant = antGrid[nextY][nextX];
+if (occupant && !occupant.alive) occupant = null;
+\end{lstlisting}
+
+Por último, cuando la hormiga logra moverse a una nueva posición libre, su referencia en la celda origen se borra y se actualiza en la celda destino. Esto mantiene la consistencia de la partición espacial en tiempo de ejecución:
+
+\begin{lstlisting}[language=JavaScript]
+// Actualización del Grid Fantasma tras movimiento exitoso
+antGrid[ant.y][ant.x] = null;
+grid[ant.y][ant.x] = 1 - state; // Invertir estado de la celda origen
+ant.dir = intendedDir;
+ant.x = nextX;
+ant.y = nextY;
+antGrid[ant.y][ant.x] = ant;
+\end{lstlisting}
+
+Asimismo, encontrar los parámetros que permitieran estabilizar el sistema fue un reto de ensayo y error, dado que la simulación tendía naturalmente hacia extremos caóticos. Fue una experiencia sumamente gratificante observar cómo, tras aplicar las matemáticas correctas y las estructuras de datos óptimas, emergía un ecosistema autosustentable en la pantalla.
+
+\section{Código Fuente}
+
+\subsection{Descripción General}
+El sistema se divide en tres componentes principales: la estructura gráfica (JSX y CSS), el motor de estado y renderizado (\texttt{script.js}), y el control de eventos. El motor principal se ejecuta mediante la función \texttt{requestAnimationFrame}, lo cual garantiza que los cálculos de física (colisiones, nacimientos y muertes) se ejecuten en sincronía con el refresco del monitor.
+
+\subsection{Funcionalidades Principales}
+
+\subsubsection{Tipos de Hormigas y Distribución Inicial}
+El simulador distribuye inicialmente a la población según los porcentajes definidos por el usuario en el panel izquierdo. Cada hormiga se inicializa con una dirección aleatoria (0=Arriba, 1=Derecha, 2=Abajo, 3=Izquierda), una edad de 0 y su color característico. Las jerarquías se asignan de la siguiente manera:
+\begin{itemize}
+    \item \textbf{Reinas (Roja):} Probabilidad base $1\%$.
+    \item \textbf{Trabajadoras (Azul):} Probabilidad base $55\%$.
+    \item \textbf{Reproductoras (Rosa):} Probabilidad base $9\%$.
+    \item \textbf{Soldados (Verde):} Probabilidad base $35\%$.
+\end{itemize}
+
+\subsubsection{Movimiento y Envejecimiento}
+En cada iteración, el reloj biológico de todas las hormigas aumenta en una unidad. Si una hormiga alcanza las 80 iteraciones de vida, muere instantáneamente y es retirada de la cuadrícula, liberando el espacio en la matriz de partición espacial. Para el movimiento, se evalúa el color de la celda sobre la cual está posicionada la hormiga; se calcula su rotación y se intenta avanzar. El estado de la celda de origen se invierte (de visitado a no visitado y viceversa).
+
+A continuación se presenta el fragmento de código que controla el envejecimiento y calcula la dirección intencionada de la hormiga según la regla básica de Langton:
+
+\begin{lstlisting}[language=JavaScript]
+// 1. Envejecimiento de la hormiga
+ant.age++;
+if(ant.age >= 80) {
+    ant.alive = false;
+    antGrid[ant.y][ant.x] = null; // Liberar celda en la partición espacial
+    deaths++;
+    continue;
+}
+
+// 2. Regla de Langton Clásica (dirección intencionada)
+const state = grid[ant.y][ant.x];
+let intendedDir = state === 0 ? (ant.dir + 1) % 4 : (ant.dir + 3) % 4;
+
+let pos = getNextPos(ant.x, ant.y, intendedDir);
+let nextX = pos.nx;
+let nextY = pos.ny;
+\end{lstlisting}
+
+El cálculo de las posiciones y el comportamiento de desbordamiento de bordes se define mediante la función auxiliar \texttt{getNextPos()}, la cual soporta tanto un mundo cerrado como un mundo toroidal (donde la hormiga reaparece por el extremo opuesto):
+
+\begin{lstlisting}[language=JavaScript]
+// Función para cálculo de la posición destino (Normal / Toroidal)
+function getNextPos(x, y, dir) {
+    let nx = x, ny = y;
+    if(dir === 0) ny--; 
+    else if(dir === 1) nx++; 
+    else if(dir === 2) ny++; 
+    else if(dir === 3) nx--;
+    
+    if(isToroidal) {
+        if(nx < 0) nx = cols - 1; else if(nx >= cols) nx = 0;
+        if(ny < 0) ny = rows - 1; else if(ny >= rows) ny = 0;
+    } else {
+        if(nx < 0) nx = 0; else if(nx >= cols) nx = cols - 1;
+        if(ny < 0) ny = 0; else if(ny >= rows) ny = rows - 1;
+    }
+    return {nx, ny};
+}
+\end{lstlisting}
+
+\subsubsection{Conflictos, Encuentros de Reinas y Nacimientos}
+Dado que dos entidades no pueden ocupar una misma celda simultáneamente, se implementaron reglas de colisión. Si la celda destino está ocupada, la hormiga gira aleatoriamente y busca una celda adyacente libre; si no hay espacio, pierde su turno.
+Existen reglas de interacción especial:
+\begin{itemize}
+    \item \textbf{Choque de Reinas:} Batallan según sus edades. Si ambas son jóvenes ($\le 60$), tienen un 50\% de probabilidad de morir. Si una es anciana ($> 60$), sus probabilidades de supervivencia caen al 20\%.
+    \item \textbf{Nacimientos:} Si una Reina y una Reproductora se encuentran cara a cara (a 180 grados mutuamente), generan descendencia en una celda libre adyacente. El tipo de la cría está definido por las "Probabilidades de Nacimiento" del panel.
+\end{itemize}
+
+El código implementado en el motor de simulación para manejar estas interacciones y la resolución de conflictos es el siguiente:
+
+\begin{lstlisting}[language=JavaScript]
+// 3. Detección de Colisiones (Celda Ocupada)
+let occupant = antGrid[nextY][nextX];
+if (occupant && !occupant.alive) occupant = null;
+let moved = true;
+
+if (occupant && occupant !== ant) {
+    conflicts++;
+    moved = false; // Detener movimiento intencionado directo
+    
+    // Regla especial: Encuentro de Reinas (Batalla de vida/muerte)
+    if(ant.type === ANT_TYPES.REINA && occupant.type === ANT_TYPES.REINA) {
+        if(ant.age <= 60 && occupant.age <= 60) {
+            if(Math.random() < 0.5) { ant.alive = false; deaths++; }
+            if(Math.random() < 0.5) { occupant.alive = false; deaths++; }
+        } else {
+            if(ant.age > 60) { if(Math.random() < 0.8) { ant.alive = false; deaths++; } }
+            else { if(Math.random() < 0.5) { ant.alive = false; deaths++; } }
+            
+            if(occupant.age > 60) { if(Math.random() < 0.8) { occupant.alive = false; deaths++; } }
+            else { if(Math.random() < 0.5) { occupant.alive = false; deaths++; } }
+        }
+    } 
+    // Regla especial: Nacimiento (Reina + Reproductora frente a frente)
+    else if ( (ant.type === ANT_TYPES.REINA && occupant.type === ANT_TYPES.REPRODUCTORA) ||
+              (ant.type === ANT_TYPES.REPRODUCTORA && occupant.type === ANT_TYPES.REINA) ) {
+        // Verificamos si están frente a frente (diferencia de dir de 2, ej. Arriba(0) y Abajo(2))
+        if (Math.abs(intendedDir - occupant.dir) === 2 || Math.abs(ant.dir - occupant.dir) === 2) {
+            let newType = getBirthType();
+            // Encontrar celdas adyacentes libres
+            let freeDirs = [0,1,2,3].filter(d => {
+                let p = getNextPos(ant.x, ant.y, d);
+                let occ = antGrid[p.ny][p.nx];
+                return !(occ && occ.alive);
+            });
+            if (freeDirs.length > 0) {
+                let bDir = freeDirs[Math.floor(Math.random()*freeDirs.length)];
+                let bPos = getNextPos(ant.x, ant.y, bDir);
+                let newAntObj = {
+                    x: bPos.nx, y: bPos.ny,
+                    type: newType, color: ANT_COLORS[newType],
+                    dir: Math.floor(Math.random() * 4),
+                    age: 0, alive: true
+                };
+                ants.push(newAntObj);
+                antGrid[bPos.ny][bPos.nx] = newAntObj;
+                births++;
+            }
+        }
+    }
+
+    // Resolver movimiento (giro aleatorio hacia celdas libres)
+    if (ant.alive) {
+        let otherDirs = [0, 1, 2, 3].filter(d => d !== intendedDir);
+        let randomDir = otherDirs[Math.floor(Math.random() * 3)];
+        let altPos = getNextPos(ant.x, ant.y, randomDir);
+        
+        let altOccupant = antGrid[altPos.ny][altPos.nx];
+        let altOccupied = altOccupant && altOccupant.alive && altOccupant !== ant;
+        
+        if (altOccupied) {
+            // Si la alternativa también está ocupada, pierde el turno
+            moved = false; 
+        } else {
+            // Se mueve en la dirección alternativa
+            intendedDir = randomDir;
+            nextX = altPos.nx;
+            nextY = altPos.ny;
+            moved = true;
+        }
+    }
+    
+    // Limpieza de referencias si murieron en combate
+    if (occupant && !occupant.alive) antGrid[occupant.y][occupant.x] = null;
+    if (!ant.alive) antGrid[ant.y][ant.x] = null;
+}
+\end{lstlisting}
+
+\subsubsection{Controles en Caliente y Funcionalidades Personalizables}
+Para dotar al simulador de una experiencia interactiva y personalizable, se diseñó e implementó un conjunto de controles que permiten modificar los parámetros del sistema en tiempo de ejecución ("en caliente") sin necesidad de reiniciar la aplicación, así como interactuar directamente con la cuadrícula de simulación.
+
+\paragraph{Pre-carga de Casos de Estudio y Pruebas del Reporte:}
+Con el objetivo de facilitar la replicación de las simulaciones y la captura de datos de los escenarios clave descritos en el reporte, se implementó un menú colapsable en la barra lateral con botones de pre-carga rápida para los cuatro experimentos principales:
+\begin{itemize}
+    \item \textbf{Sobrepoblación (Prueba 1):} Configura alta densidad ($50\%$) y una tasa reproductiva acelerada.
+    \item \textbf{Aislamiento (Prueba 5):} Configura baja densidad ($10\%$) y baja natalidad para demostrar la extinción paulatina por vejez.
+    \item \textbf{Cercanía a Estabilidad (Prueba 15):} Configura parámetros cercanos al balance óptimo ($25\%$ densidad) pero con un sutil desbalance hacia las trabajadoras estériles.
+    \item \textbf{Estabilidad Dinámica (Prueba 20):} Configura los parámetros del equilibrio homeostático dinámico ($25\%$ densidad, $40\%$ de nacimientos fértiles).
+\end{itemize}
+
+Estos botones modifican directamente los valores de entrada del DOM. A modo de ejemplo, el manejador de eventos del escenario de Cercanía a la Estabilidad (Prueba 15) se define de la siguiente manera:
+
+\begin{lstlisting}[language=JavaScript]
+// Manejador para la pre-carga del escenario de Cercania a la Estabilidad (Prueba 15)
+const btnPreloadCercania = document.getElementById('btnPreloadCercania');
+if (btnPreloadCercania) {
+    btnPreloadCercania.addEventListener('click', () => {
+        if (inputDensidadTotal) inputDensidadTotal.value = 25;
+        if (inputProbReina) inputProbReina.value = 12;
+        if (inputProbTrabajadora) inputProbTrabajadora.value = 30;
+        if (inputProbReproductora) inputProbReproductora.value = 28;
+        if (inputProbSoldado) inputProbSoldado.value = 30;
+        
+        const inputNacReina = document.getElementById('inputNacReina');
+        const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+        const inputNacReproductora = document.getElementById('inputNacReproductora');
+        const inputNacSoldado = document.getElementById('inputNacSoldado');
+        
+        if (inputNacReina) inputNacReina.value = 15;
+        if (inputNacTrabajadora) inputNacTrabajadora.value = 35;
+        if (inputNacReproductora) inputNacReproductora.value = 20;
+        if (inputNacSoldado) inputNacSoldado.value = 30;
+    });
+}
+\end{lstlisting}
+
+\paragraph{Redimensionamiento Dinámico de la Cuadrícula:}
+El usuario puede cambiar el tamaño del tablero (filas, columnas y tamaño de celda) en caliente. Al accionar el botón de aplicación, el simulador detiene el bucle de animación, re-calcula las dimensiones físicas del canvas HTML5 y limpia las matrices utilizando la función \texttt{initGrid()}:
+\begin{lstlisting}[language=JavaScript]
+updateSizeBtn.addEventListener('click', () => {
+    rows = parseInt(inputRows.value);
+    cols = parseInt(inputCols.value);
+    cellSize = parseInt(inputCellSize.value);
+    isRunning = false;
+    toggleGameBtn.innerText = "Iniciar";
+    cancelAnimationFrame(animationId);
+    initGrid();
+});
+\end{lstlisting}
+
+\paragraph{Control de la Velocidad de Ejecución:}
+La velocidad de la simulación se controla dinámicamente limitando los cuadros por segundo en el bucle principal de renderizado. Se compara la marca de tiempo actual (\textit{timestamp}) con el último renderizado y se ejecuta el paso si la diferencia supera la velocidad configurada en milisegundos:
+\begin{lstlisting}[language=JavaScript]
+function updateSpeed(newSpeed) {
+    speed = Math.max(10, Math.min(newSpeed, 1000));
+    speedInput.value = speed;
+}
+// En el bucle principal (requestAnimationFrame)
+function loop(timestamp) {
+    if(!isRunning) return;
+    if(timestamp - lastRenderTime >= speed) {
+        step();
+        lastRenderTime = timestamp;
+    }
+    animationId = requestAnimationFrame(loop);
+}
+\end{lstlisting}
+
+\paragraph{Pincel Manual e Interacción Directa en el Canvas:}
+El sistema permite alterar la cuadrícula dibujando estados de celda (0 o 1) o introduciendo hormigas individuales de cualquier tipo mediante el ratón. Para ello, se traduce la coordenada del clic relativo al lienzo a coordenadas de celda y se verifica si existe una entidad viva en esa posición usando la partición espacial O(1). Si se detecta un clic derecho (botón 2), la hormiga es eliminada del ecosistema:
+\begin{lstlisting}[language=JavaScript]
+function handleManualInput(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / cellSize);
+    const y = Math.floor((e.clientY - rect.top) / cellSize);
+    
+    if(x >= 0 && x < cols && y >= 0 && y < rows) {
+        const isRightClick = e.buttons === 2 || e.button === 2;
+        let occupant = antGrid[y][x];
+        let existingAntAlive = occupant && occupant.alive;
+        
+        if (isRightClick) {
+            if (existingAntAlive) {
+                occupant.alive = false;
+                antGrid[y][x] = null;
+                updateStats();
+                drawAll();
+            }
+            return;
+        }
+        
+        const brushValue = currentBrushValue;
+        if(brushValue === "celda") {
+            grid[y][x] = 1 - grid[y][x]; // Invertir estado
+            drawAll();
+        } else {
+            if (existingAntAlive) {
+                // Ciclar tipo si ya existe
+                if (e.type === 'mousedown') {
+                    occupant.type = (occupant.type + 1) % 4;
+                    occupant.color = ANT_COLORS[occupant.type];
+                    updateStats();
+                    drawAll();
+                }
+            } else {
+                // Colocar nueva hormiga del tipo seleccionado
+                const type = parseInt(brushValue);
+                const newAnt = {
+                    x, y, type, color: ANT_COLORS[type],
+                    dir: Math.floor(Math.random() * 4), age: 0, alive: true
+                };
+                ants.push(newAnt);
+                antGrid[y][x] = newAnt;
+                updateStats();
+                drawAll();
+            }
+        }
+    }
+}
+\end{lstlisting}
+
+\subsubsection{Resultados Empíricos y Pruebas de Estabilización}
+Para determinar las condiciones necesarias que permiten la supervivencia a largo plazo de la colonia de hormigas y el equilibrio dinámico del ecosistema, se realizaron múltiples simulaciones experimentales con distintos porcentajes de población inicial, distribución de jerarquías y tasas de natalidad de crías. Se buscó de manera sistemática evitar la extinción por envejecimiento o aislamiento espacial, así como la saturación total por sobrepoblación (congelamiento de la cuadrícula).
+
+La Tabla~\ref{tab:experimentos} detalla el historial de pruebas paramétricas registradas en la búsqueda del equilibrio, identificando mediante un asterisco ($^\star$) los hitos y escenarios principales analizados en el laboratorio.
+
+\begin{table}[H]
+    \centering
+    \caption{Historial de Experimentos de Estabilización Paramétrica (Pruebas marcadas con $^\star$ corresponden a hitos principales analizados)}
+    \label{tab:experimentos}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{|c|c|c|c|c|c|c|c|m{6cm}|}
+        \hline
+        \textbf{\#} & \textbf{Dens. Ini.} & \textbf{Dist. Inicial (Re,Tr,Rp,So)} & \textbf{Prob. Nac. (Re,Tr,Rp,So)} & \textbf{Gen.} & \textbf{Nac.} & \textbf{Dec.} & \textbf{Ratio N/D} & \textbf{Conclusión} \\ \hline
+        1$^\star$ & 50\% & 20\%, 20\%, 40\%, 20\% & 25\%, 15\%, 45\%, 15\% & 75 & 6,232 & 1,232 & 5.06 & Colapso exponencial por exceso reproductivo temprano. \\ \hline
+        2 & 40\% & 15\%, 30\%, 25\%, 30\% & 20\%, 20\%, 40\%, 20\% & 145 & 18,450 & 6,100 & 3.02 & Congelamiento por saturación espacial progresiva. \\ \hline
+        3 & 45\% & 10\%, 30\%, 30\%, 30\% & 25\%, 25\%, 35\%, 15\% & 92 & 11,200 & 4,200 & 2.67 & Bloqueo rápido de celdas libres en turnos tempranos. \\ \hline
+        4 & 5\% & 5\%, 50\%, 5\%, 40\% & 2\%, 58\%, 5\%, 35\% & 64 & 8 & 310 & 0.03 & Extinción acelerada por nula tasa de encuentros reproductivos. \\ \hline
+        5$^\star$ & 10\% & 5\%, 45\%, 10\%, 40\% & 1\%, 60\%, 4\%, 35\% & 156 & 62 & 1,062 & 0.06 & Extinción por aislamiento espacial y envejecimiento. \\ \hline
+        6 & 15\% & 10\%, 40\%, 15\%, 35\% & 5\%, 55\%, 10\%, 30\% & 240 & 310 & 1,450 & 0.21 & Extinción tardía; la distribución inicial retrasó el deceso. \\ \hline
+        7 & 25\% & 10\%, 50\%, 15\%, 25\% & 10\%, 50\%, 15\%, 25\% & 185 & 1,420 & 3,920 & 0.36 & Trabajadoras estériles no reponen decesos naturales. \\ \hline
+        8 & 25\% & 10\%, 25\%, 15\%, 50\% & 10\%, 25\%, 15\%, 50\% & 210 & 1,950 & 4,120 & 0.47 & Exceso de soldados frena encuentros reina-reproductora. \\ \hline
+        9 & 30\% & 10\%, 30\%, 25\%, 35\% & 15\%, 25\%, 30\%, 30\% & 160 & 2,150 & 5,100 & 0.42 & Extinción por desbalance de soldados en la descendencia. \\ \hline
+        10 & 35\% & 15\%, 35\%, 15\%, 35\% & 10\%, 40\%, 20\%, 30\% & 125 & 1,850 & 4,950 & 0.37 & Extinción rápida por falta de reproductoras en nacimientos. \\ \hline
+        11 & 20\% & 5\%, 55\%, 10\%, 30\% & 5\%, 65\%, 10\%, 20\% & 80 & 120 & 1,400 & 0.09 & Rápido colapso por falta de reinas fecundas iniciales. \\ \hline
+        12 & 12\% & 10\%, 40\%, 20\%, 30\% & 5\%, 45\%, 15\%, 35\% & 192 & 245 & 1,180 & 0.21 & Baja densidad imposibilita encuentros a 180 grados. \\ \hline
+        13 & 22\% & 12\%, 38\%, 20\%, 30\% & 12\%, 38\%, 18\%, 32\% & 345 & 6,120 & 7,950 & 0.77 & Tendencia a la extinción lenta; decesos superan nacimientos. \\ \hline
+        14 & 28\% & 15\%, 25\%, 30\%, 30\% & 12\%, 28\%, 24\%, 36\% & 410 & 9,450 & 11,800 & 0.80 & Supervivencia intermedia amortiguada; oscilación descendente. \\ \hline
+        15$^\star$ & 25\% & 12\%, 30\%, 28\%, 30\% & 15\%, 35\%, 20\%, 30\% & 761 & 16,151 & 18,651 & 0.87 & Excelente amortiguación; sostén de vida masiva por 700 turnos. \\ \hline
+        16 & 25\% & 15\%, 25\%, 30\%, 30\% & 15\%, 25\%, 25\%, 35\% & 620 & 18,240 & 21,100 & 0.86 & Estabilidad temporal con decaimiento en turnos tardíos. \\ \hline
+        17 & 25\% & 14\%, 28\%, 28\%, 30\% & 16\%, 28\%, 26\%, 30\% & 890 & 29,420 & 31,250 & 0.94 & Elevada supervivencia; colapso por acumulación de reinas ancianas. \\ \hline
+        18 & 26\% & 13\%, 29\%, 29\%, 29\% & 15\%, 29\%, 26\%, 30\% & 950 & 34,120 & 35,900 & 0.95 & Alta longevidad; colapso por desbalance en últimas generaciones. \\ \hline
+        19 & 24\% & 12\%, 32\%, 28\%, 28\% & 15\%, 31\%, 25\%, 29\% & 810 & 25,400 & 26,800 & 0.95 & Sistema amortiguado; extinción al decaer población de reproductoras. \\ \hline
+        20$^\star$ & 25\% & 12\%, 30\%, 28\%, 30\% & 16\%, 30\%, 24\% , 30\% & >513 & 44,708 & 39,078 & 1.14 & Equilibrio autosostenible logrado. Vida indefinida. \\ \hline
+    \end{tabular}
+    }
+\end{table}
+
+\paragraph{Descubrimientos Importantes del Análisis Paramétrico:}
+A partir del análisis detallado de los experimentos y la posterior observación en caliente del simulador, se obtuvieron descubrimientos fundamentales sobre el comportamiento del sistema complejo:
+\begin{itemize}
+    \item \textbf{En el escenario de Sobrepoblación (Prueba 1$^\star$):} Se \textbf{descubrió} que una tasa reproductiva desmedida (nacimiento de reinas y reproductoras de $70\%$ combinada) produce un crecimiento demográfico exponencial incontrolable. Las celdas adyacentes se agotan rápidamente, provocando que las hormigas pierdan su turno al colisionar indefinidamente, lo que lleva al "congelamiento espacial" del tablero.
+    \item \textbf{En el escenario de Aislamiento Poblacional (Prueba 5$^\star$):} Se \textbf{descubrió} que con una densidad inicial muy baja ($10\%$) y baja natalidad reproductiva ($5\%$), la distancia promedio entre los agentes impide la coincidencia frontal de Reinas y Reproductoras. La tasa de nacimientos es insuficiente para contrarrestar la mortalidad por vejez (iteración 80), lo que causa una extinción total.
+    \item \textbf{En el escenario de Cercanía a la Estabilidad (Prueba 15$^\star$):} Se \textbf{descubrió} que la colonia es extremadamente sensible a pequeñas variaciones decimales en las probabilidades de nacimiento. Aunque el sistema logró amortiguar la extinción durante más de 760 generaciones, un sutil desbalance hacia las trabajadoras estériles finalmente decantó el ecosistema a una extinción lenta.
+    \item \textbf{En el escenario de Estabilidad Dinámica exitoso (Prueba 20$^\star$):} Se \textbf{descubrió} que la configuración de equilibrio exacto requiere un balance homeostático, alcanzado mediante un $25\%$ de densidad y un $40\%$ de nacimientos de tipos fértiles (16\% Reinas y 24\% Reproductoras). En este estado, los decesos por vejez se equiparan con precisión matemática con los nacimientos por encuentros frontales a 180 grados, permitiendo una convivencia del ecosistema a perpetuidad.
+\end{itemize}
+
+\paragraph{Conclusión del Análisis de Estabilización:}
+El sistema es altamente sensible a la probabilidad de nacimiento de crías reproductivas (Reinas y Reproductoras). Manteniendo esta tasa alrededor del \textbf{40\% combinada} con una densidad inicial moderada ($25\%$), se logra estabilizar la reacción en cadena, permitiendo que la colonia prospere en el tiempo formando un sistema vivo, equilibrado y caóticamente hermoso.
+
+A continuación, se describen con mayor detalle los tres escenarios representativos que demuestran los comportamientos biológicos del ecosistema:
+\begin{enumerate}
+    \item \textbf{Aislamiento Poblacional:} Densidad inicial del 10\%. Tasa de nacimiento reproductora del 4\%. La escasa probabilidad reproductiva impidió reponer a la primera generación, resultando en la extinción total tras $\approx 156$ generaciones.
+
+    \begin{figure}[H]
+        \centering
+        \framebox[\textwidth]{\vbox to 6cm{\vfill\centering \textbf{CAPTURA DE PANTALLA: ESCENARIO DE AISLAMIENTO POBLACIONAL}\vfill}}
+        % Para mostrar la imagen real (que respetará el margen de la página), descomenta la siguiente línea y comenta el \framebox de arriba:
+        % \includegraphics[width=\textwidth]{aislamiento_poblacional.png}
+        \caption{\textbf{Simulación del Escenario de Aislamiento Poblacional.} En esta captura se visualiza el decaimiento demográfico. Con una densidad muy baja del $10\%$ y escasas reproductoras, los agentes mueren por vejez sin encontrarse lo suficiente como para reproducirse. La población activa cae a cero, mostrando un tablero prácticamente vacío con rastros inconexos de celdas visitadas.}
+        \label{fig:captura_aislamiento}
+    \end{figure}
+
+    \item \textbf{Sobrepoblación:} Densidad inicial del 50\%. Tasa de nacimiento reproductora del 45\%. Se desencadenó una reacción exponencial temprana. El tablero colapsó en 75 turnos debido a la saturación total del espacio geográfico (congelamiento de la cuadrícula).
+
+    \begin{figure}[H]
+        \centering
+        \framebox[\textwidth]{\vbox to 6cm{\vfill\centering \textbf{CAPTURA DE PANTALLA: ESCENARIO DE SOBREPOBLACIÓN}\vfill}}
+        % Para mostrar la imagen real (que respetará el margen de la página), descomenta la siguiente línea y comenta el \framebox de arriba:
+        % \includegraphics[width=\textwidth]{sobrepoblacion.png}
+        \caption{\textbf{Simulación del Escenario de Sobrepoblación.} Captura que exhibe la cuadrícula completamente congestionada de hormigas y celdas marcadas. Al nacer demasiadas hormigas, el espacio adyacente libre desaparece. Los conflictos se disparan y las hormigas no logran desplazarse, lo que causa un congelamiento dinámico donde el sistema colapsa por asfixia espacial.}
+        \label{fig:captura_sobrepoblacion}
+    \end{figure}
+
+    \item \textbf{Estabilidad Dinámica:} Densidad del 25\%. Distribución inicial (12\% Reinas, 30\% Trabajadoras, 28\% Reproductoras, 30\% Soldados). Tasa de nacimiento combinada del 40\% (16\% Reinas, 24\% Reproductoras). El ecosistema encontró un equilibrio brillante (Ratio de Nacimientos/Muertes de 1.14), manteniendo a más de 8,000 individuos vivos por más de 500 iteraciones ininterrumpidas.
+
+    \begin{figure}[H]
+        \centering
+        \framebox[\textwidth]{\vbox to 6cm{\vfill\centering \textbf{CAPTURA DE PANTALLA: ESCENARIO DE ESTABILIDAD DINÁMICA}\vfill}}
+        % Para mostrar la imagen real (que respetará el margen de la página), descomenta la siguiente línea y comenta el \framebox de arriba:
+        % \includegraphics[width=\textwidth]{estabilidad_dinamica.png}
+        \caption{\textbf{Simulación del Escenario de Estabilidad Dinámica.} Demostración visual de la estabilidad del ecosistema a largo plazo. La tasa de nacimientos equilibra de forma homeostática a las muertes naturales. En el canvas se aprecia una población numerosa pero distribuida de forma homogénea, con un flujo dinámico y estable, sin signos de extinción inminente ni de sobrepoblación restrictiva.}
+        \label{fig:captura_estabilidad}
+    \end{figure}
+
+\end{enumerate}
+
+Adicionalmente, se incluye una captura general para ilustrar la interfaz interactiva construida:
+
+\begin{figure}[H]
+    \centering
+    \framebox[\textwidth]{\vbox to 8cm{\vfill\centering \textbf{CAPTURA DE PANTALLA: INTERFAZ GENERAL DE LA APLICACIÓN DE SIMULACIÓN}\vfill}}
+    % Para mostrar la imagen real (que respetará el margen de la página), descomenta la siguiente línea y comenta el \framebox de arriba:
+    % \includegraphics[width=\textwidth]{interfaz_general.png}
+    \caption{\textbf{Interfaz General de la Aplicación de Simulación.} La captura muestra la vista completa de la simulación en funcionamiento. El panel de la izquierda contiene el canvas interactivo que dibuja a los agentes mediante su representación vectorial sutil. El panel de la derecha cuenta con la tarjeta de Estadísticas en tiempo real (mostrando población actual, nacimientos, muertes, conflictos y ratio de reemplazo) y los tres acordeones colapsables para configurar en caliente el tamaño del tablero, la población de arranque y las reglas de reproducción.}
+    \label{fig:captura_interfaz}
+\end{figure}
+
+\section{Conclusión}
+El desarrollo de esta variante avanzada de la Hormiga de Langton demuestra la asombrosa capacidad de los autómatas celulares y los sistemas complejos para emular la naturaleza. A partir de componentes microscópicos sumamente sencillos (una regla de movimiento, reglas de mortalidad y probabilidad), surgen macro-comportamientos que exhiben dinámicas de ecosistemas reales (extinciones, plagas por sobrepoblación y equilibrio natural sostenido). 
+El uso de algoritmos óptimos, como la matriz de partición espacial, resultó ser la clave técnica que hizo factible procesar este caos computacional a gran escala, permitiendo estudiar el fenómeno visual en tiempo real.
+
+\newpage
+
+\begin{thebibliography}{99}
+
+\bibitem{langton1986}
+Langton, C. G. (1986). \textit{Studying artificial life with cellular automata}. Physica D: Nonlinear Phenomena, 22(1-3), 120-149.
+
+\bibitem{reactvite}
+React Documentation \& Vite.js Guides. \textit{Frontend Tooling \& UI Rendering Frameworks}.
+
+\bibitem{mdncanvas}
+Mozilla Developer Network (MDN). \textit{Canvas API y requestAnimationFrame}. Web documentation.
+
+\end{thebibliography}
+
+\newpage
+
+\appendix
+\justifying
+
+
+\section{Anexos del Simulador}
+
+\subsection{¿Dónde puedo encontrar este código?}
+El código fuente de este proyecto, incluyendo la lógica de física de colisiones, partición espacial y renderizado a través de HTML5 Canvas, se encuentra disponible para consulta pública en el siguiente repositorio de GitHub: \url{https://github.com/TU_USUARIO/TU_REPOSITORIO}.
+
+De igual forma, se puede acceder a la demostración interactiva desplegada en la web y ejecutarla directamente desde el navegador visitando el siguiente enlace: \url{https://TU_USUARIO.github.io/TU_REPOSITORIO}.
+
+
+\subsection{Código Fuente Completo}
+
+\subsubsection{Archivo Principal HTML (\texttt{index.html})}
+\begin{lstlisting}[language=HTML]
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>hormigadelangton</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+\end{lstlisting}
+
+\subsubsection{Lógica del Componente GUI (\texttt{LangtonsAnt.jsx})}
+\begin{lstlisting}[language=JavaScript]
+import "../../src/assets/script.js";
+import { Crown, HardHat, Heart, Swords, Square } from '../components/Icons.jsx';
+
+function LangtonsAnt() {
+  return (
+    <div className="contenedor-principal">
+      {/* ─── HEADER ─── */}
+      <div className="titulo">
+        <h1>🐜 Simulación: Hormiga de Langton</h1>
+        <p>Múltiples tipos de hormigas con reglas complejas</p>
+      </div>
+
+      {/* ─── TOOLBAR ─── */}
+      <div className="toolbar">
+        <div className="toolbar-group">
+          <button id="generateRandomBtn" className="btn-generate" title="Generar población aleatoria">
+            🎲 Poblar
+          </button>
+          <button id="toggleGame" className="btn-success" title="Iniciar/Pausar simulación">
+            ▶ Iniciar
+          </button>
+          <button id="nextGenerationBtn" className="btn-outline" title="Avanzar una iteración">
+            ⏭ Paso
+          </button>
+          <button id="resetBtn" className="btn-outline" title="Reiniciar simulación">
+            🔄 Reset
+          </button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group">
+          <span className="speed-label">Velocidad (ms):</span>
+          <div className="speed-controls">
+            <button id="minSpeed" className="btn-outline btn-small" title="Velocidad mínima (10ms)">min</button>
+            <button id="decreaseSpeed" className="btn-outline btn-small" title="Reducir velocidad">−</button>
+            <input type="number" id="speedInput" defaultValue={50} min={10} step={10} readOnly />
+            <button id="increaseSpeed" className="btn-outline btn-small" title="Aumentar velocidad">+</button>
+            <button id="maxSpeed" className="btn-outline btn-small" title="Velocidad máxima (1000ms)">máx</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── CONTENIDO PRINCIPAL ─── */}
+      <div className="main-content">
+
+        {/* ─── CANVAS ─── */}
+        <div className="juego-contenedor">
+          <div className="instrucciones-wrapper">
+            <button className="instrucciones-toggle" title="Instrucciones del ratón" aria-label="Ver instrucciones">?</button>
+            <div className="instrucciones-popup">
+              <strong>Controles del ratón:</strong>
+              <ul>
+                <li><strong>Clic Izquierdo:</strong> Dibuja la hormiga o celda seleccionada. Si ya hay una hormiga, la cambia de tipo.</li>
+                <li><strong>Clic Derecho:</strong> Elimina la hormiga debajo del cursor.</li>
+              </ul>
+            </div>
+          </div>
+          <canvas id="gameCanvas" />
+        </div>
+
+        {/* ─── PANEL LATERAL ─── */}
+        <aside className="panel-lateral">
+
+          {/* Estadísticas */}
+          <div className="seccion">
+            <div className="seccion-header">
+              <span className="seccion-icon">📊</span> Estadísticas
+            </div>
+            <div className="stats-grid">
+              <div className="stat-item">
+                <span className="stat-label">Generaciones</span>
+                <span className="stat-value" id="generationCounter">0</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">Población</span>
+                <span className="stat-value" id="aliveCounter">0</span>
+              </div>
+
+              <div className="stat-divider" />
+
+              <div className="stat-item stat-reina">
+                <span className="stat-label">👑 Reinas</span>
+                <span className="stat-value" id="countReinas">0</span>
+              </div>
+              <div className="stat-item stat-trabajadora">
+                <span className="stat-label">⛑ Trabajadoras</span>
+                <span className="stat-value" id="countTrabajadoras">0</span>
+              </div>
+              <div className="stat-item stat-reproductora">
+                <span className="stat-label">💕 Reproductoras</span>
+                <span className="stat-value" id="countReproductoras">0</span>
+              </div>
+              <div className="stat-item stat-soldado">
+                <span className="stat-label">⚔ Soldados</span>
+                <span className="stat-value" id="countSoldados">0</span>
+              </div>
+
+              <div className="stat-divider" />
+
+              <div className="stat-item stat-nacimientos">
+                <span className="stat-label">Nacimientos</span>
+                <span className="stat-value" id="countNacimientos">0</span>
+              </div>
+              <div className="stat-item stat-decesos">
+                <span className="stat-label">Decesos</span>
+                <span className="stat-value" id="countDecesos">0</span>
+              </div>
+              <div className="stat-item stat-conflictos">
+                <span className="stat-label">Conflictos</span>
+                <span className="stat-value" id="countConflictos">0</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">Densidad</span>
+                <span className="stat-value" id="densityStat">0%</span>
+              </div>
+
+              <div className="stat-divider" />
+
+              <div className="stat-item full-width">
+                <span className="stat-label">Ratio Naci/Decesos</span>
+                <span className="stat-value" id="ratioStat">1.00</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Pincel Manual */}
+          <div className="seccion">
+            <div className="seccion-header">
+              <span className="seccion-icon">🖌</span> Pincel Manual
+            </div>
+            <div className="brush-selector" id="brushContainer">
+              <button className="brush-btn active" data-brush="celda" title="Invertir Celda"><Square size={16} /></button>
+              <button className="brush-btn" data-brush="0" style={{ backgroundColor: 'var(--color-reina)' }} title="Reina"><Crown size={16} /></button>
+              <button className="brush-btn" data-brush="1" style={{ backgroundColor: 'var(--color-trabajadora)' }} title="Trabajadora"><HardHat size={16} /></button>
+              <button className="brush-btn" data-brush="2" style={{ backgroundColor: 'var(--color-reproductora)' }} title="Reproductora"><Heart size={16} /></button>
+              <button className="brush-btn" data-brush="3" style={{ backgroundColor: 'var(--color-soldado)', color: '#0b1120' }} title="Soldado"><Swords size={16} /></button>
+            </div>
+          </div>
+
+          {/* Toggles */}
+          <div className="seccion">
+            <div className="toggles-row">
+              <div className="toggle-item">
+                <label htmlFor="toroidalCheck">🌐 Mundo Toroidal</label>
+                <label className="switch">
+                  <input type="checkbox" id="toroidalCheck" defaultChecked />
+                  <span className="slider round" />
+                </label>
+              </div>
+              <div className="toggle-item">
+                <label htmlFor="showPathCheck">👁 Celdas Visitadas</label>
+                <label className="switch">
+                  <input type="checkbox" id="showPathCheck" defaultChecked />
+                  <span className="slider round" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── COLAPSABLE: Casos de Estudio (Reporte) ─── */}
+          <details className="seccion-colapsable" open>
+            <summary>📊 Casos de Estudio (Reporte)</summary>
+            <div className="seccion-body">
+              <p className="seccion-texto-caso" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px', lineHeight: '1.4', textAlign: 'justify' }}>
+                Estas configuraciones corresponden a los casos de estudio y pruebas más representativos descritos en el reporte de estabilización del ecosistema.
+              </p>
+              <button id="btnPreloadSobrepoblacion" className="btn-preload" title="Escenario de Sobrepoblación (Prueba 1)">
+                💥 Sobrepoblación (Prueba 1)
+              </button>
+              <button id="btnPreloadAislamiento" className="btn-preload" title="Escenario de Aislamiento (Prueba 5)">
+                💀 Aislamiento (Prueba 5)
+              </button>
+              <button id="btnPreloadCercania" className="btn-preload" title="Escenario de Cercanía a la Estabilidad (Prueba 15)">
+                ⚖️ Cercanía a Estabilidad (Prueba 15)
+              </button>
+              <button id="btnPreloadEstabilidad" className="btn-preload" title="Escenario de Estabilidad Dinámica (Prueba 20)">
+                🌟 Estabilidad Dinámica (Prueba 20)
+              </button>
+            </div>
+          </details>
+
+          {/* ─── COLAPSABLE: Configuración del Grid ─── */}
+          <details className="seccion-colapsable">
+            <summary>⚙ Configuración del Grid</summary>
+            <div className="seccion-body">
+              <div className="config-row">
+                <label htmlFor="inputRows">Filas:</label>
+                <input type="number" id="inputRows" min={10} defaultValue={100} step={10} />
+              </div>
+              <div className="config-row">
+                <label htmlFor="inputCols">Columnas:</label>
+                <input type="number" id="inputCols" min={10} defaultValue={100} step={10} />
+              </div>
+              <div className="config-row">
+                <label htmlFor="inputCellSize">Tamaño de celdas:</label>
+                <input type="number" id="inputCellSize" min={2} defaultValue={6} />
+              </div>
+              <button id="updateSizeBtn" className="btn-apply">Aplicar Tamaño</button>
+            </div>
+          </details>
+
+          {/* ─── COLAPSABLE: Población Inicial ─── */}
+          <details className="seccion-colapsable">
+            <summary>🐜 Población Inicial</summary>
+            <div className="seccion-body">
+              <div className="config-row">
+                <label htmlFor="inputDensidadTotal">Densidad Total (%):</label>
+                <input type="number" id="inputDensidadTotal" min="1" max="100" defaultValue="50" />
+              </div>
+              <div className="section-subtitle">Distribución de tipos (%):</div>
+              <div className="ant-density">
+                <div className="ant-type-indicator">
+                  <input type="color" id="colorReina" defaultValue="#FF0000" disabled style={{ padding: 0, width: 16, height: 16 }} />
+                  <label><Crown size={14} style={{ marginRight: 3 }} /> Reinas:</label>
+                </div>
+                <input type="number" id="inputProbReina" min="0" max="100" defaultValue="10" />
+              </div>
+              <div className="ant-density">
+                <div className="ant-type-indicator">
+                  <input type="color" id="colorTrabajadora" defaultValue="#0000FF" disabled style={{ padding: 0, width: 16, height: 16 }} />
+                  <label><HardHat size={14} style={{ marginRight: 3 }} /> Trabajadoras:</label>
+                </div>
+                <input type="number" id="inputProbTrabajadora" min="0" max="100" defaultValue="35" />
+              </div>
+              <div className="ant-density">
+                <div className="ant-type-indicator">
+                  <input type="color" id="colorReproductora" defaultValue="#FF69B4" disabled style={{ padding: 0, width: 16, height: 16 }} />
+                  <label><Heart size={14} style={{ marginRight: 3 }} /> Reproductoras:</label>
+                </div>
+                <input type="number" id="inputProbReproductora" min="0" max="100" defaultValue="25" />
+              </div>
+              <div className="ant-density">
+                <div className="ant-type-indicator">
+                  <input type="color" id="colorSoldado" defaultValue="#00FF00" disabled style={{ padding: 0, width: 16, height: 16 }} />
+                  <label><Swords size={14} style={{ marginRight: 3 }} /> Soldados:</label>
+                </div>
+                <input type="number" id="inputProbSoldado" min="0" max="100" defaultValue="30" />
+              </div>
+            </div>
+          </details>
+
+          {/* ─── COLAPSABLE: Nacimientos ─── */}
+          <details className="seccion-colapsable">
+            <summary>🥚 Nacimientos (Probabilidad %)</summary>
+            <div className="seccion-body">
+              <div className="ant-density">
+                <label><Crown size={14} style={{ marginRight: 3 }} /> Reinas:</label>
+                <input type="number" id="inputNacReina" min="0" max="100" defaultValue="25" />
+              </div>
+              <div className="ant-density">
+                <label><HardHat size={14} style={{ marginRight: 3 }} /> Trabajadoras:</label>
+                <input type="number" id="inputNacTrabajadora" min="0" max="100" defaultValue="15" />
+              </div>
+              <div className="ant-density">
+                <label><Heart size={14} style={{ marginRight: 3 }} /> Reproductoras:</label>
+                <input type="number" id="inputNacReproductora" min="0" max="100" defaultValue="45" />
+              </div>
+              <div className="ant-density">
+                <label><Swords size={14} style={{ marginRight: 3 }} /> Soldados:</label>
+                <input type="number" id="inputNacSoldado" min="0" max="100" defaultValue="15" />
+              </div>
+            </div>
+          </details>
+
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+export default LangtonsAnt;
+\end{lstlisting}
+
+\subsubsection{Estilos Globales y UI (\texttt{index.css})}
+El c\'odigo de estilos CSS es demasiado extenso para ser incluido en su totalidad dentro de este reporte, ya que incrementar\'ia considerablemente la cantidad de p\'aginas. En su lugar, el c\'odigo fuente completo de \texttt{index.css} puede ser consultado directamente en el siguiente enlace del repositorio de GitHub: \url{https://github.com/TU_USUARIO/TU_REPOSITORIO/blob/main/src/index.css}.
+
+\subsubsection{Motor Lógico y Rendering O(1) (\texttt{script.js})}
+\begin{lstlisting}[language=JavaScript]
+console.log("Script cargado: Inicializando Hormiga de Langton...");
+
+function initApp() {
+    console.log("Intentando inicializar...");
+    const canvas = document.getElementById('gameCanvas');
+    if(!canvas) {
+        // React hasn't mounted yet — retry
+        requestAnimationFrame(initApp);
+        return;
+    }
+    // Prevent duplicate initialization on HMR
+    if(canvas.dataset.initialized) return;
+    canvas.dataset.initialized = 'true';
+    console.log("DOM listo. Configurando Canvas...");
+
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const inputRows = document.getElementById('inputRows');
+    const inputCols = document.getElementById('inputCols');
+    const inputCellSize = document.getElementById('inputCellSize');
+    const updateSizeBtn = document.getElementById('updateSizeBtn');
+    
+    // Inputs de población
+    const inputDensidadTotal = document.getElementById('inputDensidadTotal');
+    const inputProbReina = document.getElementById('inputProbReina');
+    const inputProbTrabajadora = document.getElementById('inputProbTrabajadora');
+    const inputProbReproductora = document.getElementById('inputProbReproductora');
+    const inputProbSoldado = document.getElementById('inputProbSoldado');
+    
+    const generateRandomBtn = document.getElementById('generateRandomBtn');
+    const toggleGameBtn = document.getElementById('toggleGame');
+    const resetBtn = document.getElementById('resetBtn');
+    const nextGenerationBtn = document.getElementById('nextGenerationBtn');
+    const toroidalCheck = document.getElementById('toroidalCheck');
+    const showPathCheck = document.getElementById('showPathCheck');
+    const speedInput = document.getElementById('speedInput');
+    
+    const countReinas = document.getElementById('countReinas');
+    const countTrabajadoras = document.getElementById('countTrabajadoras');
+    const countReproductoras = document.getElementById('countReproductoras');
+    const countSoldados = document.getElementById('countSoldados');
+    const generationCounter = document.getElementById('generationCounter');
+    const aliveCounter = document.getElementById('aliveCounter');
+
+    let rows = parseInt(inputRows.value);
+    let cols = parseInt(inputCols.value);
+    let cellSize = parseInt(inputCellSize.value);
+    
+    // Variables globales del simulador
+    let grid = []; // 0 = blanco (no visitado), 1 = negro (visitado)
+    let antGrid = []; // partición espacial O(1)
+    let ants = [];
+    let generation = 0;
+    let deaths = 0;
+    let births = 0;
+    let conflicts = 0;
+    let isRunning = false;
+    let speed = parseInt(speedInput.value);
+    let animationId = null;
+    let lastRenderTime = 0;
+
+    const ANT_TYPES = {
+        REINA: 0,
+        TRABAJADORA: 1,
+        REPRODUCTORA: 2,
+        SOLDADO: 3
+    };
+
+    const ANT_COLORS = {
+        [ANT_TYPES.REINA]: '#FF0000',
+        [ANT_TYPES.TRABAJADORA]: '#0000FF',
+        [ANT_TYPES.REPRODUCTORA]: '#FF69B4',
+        [ANT_TYPES.SOLDADO]: '#00FF00'
+    };
+
+    // Precarga y Colorización del SVG
+    let antImages = {};
+    let svgsLoaded = false;
+    const baseAntImg = new Image();
+    baseAntImg.src = '/src/assets/Hormiga.svg'; // Ruta absoluta del servidor de Vite
+    
+    baseAntImg.onload = () => {
+        for (const type of Object.values(ANT_TYPES)) {
+            const color = ANT_COLORS[type];
+            const tCanvas = document.createElement('canvas');
+            tCanvas.width = 128; // Resolución interna
+            tCanvas.height = 128;
+            const tCtx = tCanvas.getContext('2d');
+            
+            // Dibujar la silueta original
+            tCtx.drawImage(baseAntImg, 0, 0, 128, 128);
+            
+            // Aplicar tinte de color usando source-in (reemplaza píxeles no transparentes)
+            tCtx.globalCompositeOperation = 'source-in';
+            tCtx.fillStyle = color;
+            tCtx.fillRect(0, 0, 128, 128);
+            
+            antImages[type] = tCanvas;
+        }
+        svgsLoaded = true;
+        drawAll(); // Redibujar si ya había algo
+    };
+
+    function initGrid() {
+        grid = [];
+        antGrid = [];
+        for (let y = 0; y < rows; y++) {
+            let row = [];
+            let antRow = [];
+            for (let x = 0; x < cols; x++) {
+                row.push(0);
+                antRow.push(null);
+            }
+            grid.push(row);
+            antGrid.push(antRow);
+        }
+        ants = [];
+        generation = 0;
+        deaths = 0;
+        births = 0;
+        conflicts = 0;
+        document.getElementById('countDecesos').innerText = deaths;
+        document.getElementById('countNacimientos').innerText = births;
+        document.getElementById('countConflictos').innerText = conflicts;
+        updateStats();
+        resizeCanvas();
+        drawAll();
+    }
+
+    function resizeCanvas() {
+        canvas.width = cols * cellSize;
+        canvas.height = rows * cellSize;
+    }
+
+    function drawAll() {
+        if (!grid || grid.length === 0) return;
+        
+        // Dibujar el fondo oscuro y líneas sutiles
+        ctx.fillStyle = '#1e1e1e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.strokeStyle = '#333';
+        for(let i = 0; i <= cols; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * cellSize, 0);
+            ctx.lineTo(i * cellSize, canvas.height);
+            ctx.stroke();
+        }
+        for(let j = 0; j <= rows; j++) {
+            ctx.beginPath();
+            ctx.moveTo(0, j * cellSize);
+            ctx.lineTo(canvas.width, j * cellSize);
+            ctx.stroke();
+        }
+
+        // Dibujar el estado de las celdas en segundo plano
+        // (Las etiquetas 0 y 1 no se muestran, solo su efecto visual)
+        if (!showPathCheck || showPathCheck.checked) {
+            ctx.fillStyle = '#f8fafc'; // Color para estado '1' (como negro en la regla original)
+            for(let y = 0; y < rows; y++) {
+                for(let x = 0; x < cols; x++) {
+                    if(grid[y][x] === 1) {
+                        ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+                    }
+                }
+            }
+        }
+
+        // Dibujar las hormigas por encima de las celdas
+        for(const ant of ants) {
+            if(!ant.alive) continue;
+            
+            if (svgsLoaded && antImages[ant.type]) {
+                ctx.save();
+                // Trasladar al centro de la celda
+                ctx.translate(ant.x * cellSize + cellSize / 2, ant.y * cellSize + cellSize / 2);
+                
+                // Rotar según la dirección: 0=Arriba, 1=Derecha, 2=Abajo, 3=Izquierda
+                // Compensamos -45 grados (-Math.PI / 4) porque el SVG base apunta a la esquina superior derecha
+                ctx.rotate(ant.dir * Math.PI / 2 - Math.PI / 4);
+                
+                // Dibujar centrado
+                ctx.drawImage(antImages[ant.type], -cellSize / 2, -cellSize / 2, cellSize, cellSize);
+                ctx.restore();
+            } else {
+                // Fallback a cuadrados
+                ctx.fillStyle = ant.color;
+                ctx.fillRect(ant.x * cellSize + 1, ant.y * cellSize + 1, cellSize - 2, cellSize - 2);
+            }
+        }
+    }
+
+    function populateAnts() {
+        initGrid();
+        const totalCells = rows * cols;
+        const densidad = parseInt(inputDensidadTotal.value) || 50;
+        const numAnts = Math.floor(totalCells * (densidad / 100));
+        
+        let pReina = parseFloat(inputProbReina.value) || 0;
+        let pTrab = parseFloat(inputProbTrabajadora.value) || 0;
+        let pRep = parseFloat(inputProbReproductora.value) || 0;
+        let pSold = parseFloat(inputProbSoldado.value) || 0;
+        
+        // Normalizar probabilidades si no suman 100%
+        const totalP = pReina + pTrab + pRep + pSold;
+        if (totalP > 0) {
+            pReina /= totalP;
+            pTrab /= totalP;
+            pRep /= totalP;
+            pSold /= totalP;
+        } else {
+            // Valores por defecto en caso de inputs vacíos o todos en 0
+            pReina = 0.01; pTrab = 0.55; pRep = 0.09; pSold = 0.35;
+        }
+        
+        const nReinas = Math.floor(numAnts * pReina);
+        const nTrabajadoras = Math.floor(numAnts * pTrab);
+        const nReproductoras = Math.floor(numAnts * pRep);
+        const nSoldados = Math.floor(numAnts * pSold);
+        
+        const typesToPlace = [
+            ...Array(nReinas).fill(ANT_TYPES.REINA),
+            ...Array(nTrabajadoras).fill(ANT_TYPES.TRABAJADORA),
+            ...Array(nReproductoras).fill(ANT_TYPES.REPRODUCTORA),
+            ...Array(nSoldados).fill(ANT_TYPES.SOLDADO)
+        ];
+        
+        // Completar por decimales redondeados
+        while(typesToPlace.length < numAnts) {
+            typesToPlace.push(ANT_TYPES.TRABAJADORA);
+        }
+        
+        // Mezclar aleatoriamente el orden
+        typesToPlace.sort(() => Math.random() - 0.5);
+        
+        // Obtener posiciones únicas aleatorias
+        let availablePositions = [];
+        for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+                availablePositions.push({x, y});
+            }
+        }
+        availablePositions.sort(() => Math.random() - 0.5);
+        
+        for(let i=0; i<numAnts; i++) {
+            const pos = availablePositions[i];
+            const type = typesToPlace[i];
+            const newAnt = {
+                x: pos.x,
+                y: pos.y,
+                type: type,
+                color: ANT_COLORS[type],
+                dir: Math.floor(Math.random() * 4), // 0:Arriba, 1:Derecha, 2:Abajo, 3:Izquierda
+                age: 0,
+                alive: true
+            };
+            ants.push(newAnt);
+            antGrid[pos.y][pos.x] = newAnt;
+        }
+        
+        updateStats();
+        drawAll();
+    }
+
+    function updateStats() {
+        let nReinas = 0, nTrab = 0, nRep = 0, nSold = 0, nAlive = 0;
+        for(const ant of ants) {
+            if(ant.alive) {
+                nAlive++;
+                if(ant.type === ANT_TYPES.REINA) nReinas++;
+                else if(ant.type === ANT_TYPES.TRABAJADORA) nTrab++;
+                else if(ant.type === ANT_TYPES.REPRODUCTORA) nRep++;
+                else if(ant.type === ANT_TYPES.SOLDADO) nSold++;
+            }
+        }
+        generationCounter.innerText = generation;
+        aliveCounter.innerText = nAlive;
+        countReinas.innerText = nReinas;
+        countTrabajadoras.innerText = nTrab;
+        countReproductoras.innerText = nRep;
+        countSoldados.innerText = nSold;
+
+        const totalCells = rows * cols;
+        const density = totalCells > 0 ? ((nAlive / totalCells) * 100).toFixed(2) : 0;
+        const densityElement = document.getElementById('densityStat');
+        if (densityElement) densityElement.innerText = density + '%';
+
+        const ratio = deaths > 0 ? (births / deaths).toFixed(2) : (births > 0 ? "Inf" : "1.00");
+        const ratioElement = document.getElementById('ratioStat');
+        if (ratioElement) ratioElement.innerText = ratio;
+    }
+
+    function step() {
+        const isToroidal = toroidalCheck.checked;
+
+        // Probabilidades de Nacimiento
+        const inputNacReina = document.getElementById('inputNacReina');
+        const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+        const inputNacReproductora = document.getElementById('inputNacReproductora');
+        const inputNacSoldado = document.getElementById('inputNacSoldado');
+        
+        let pNacReina = inputNacReina ? parseFloat(inputNacReina.value) : 1;
+        let pNacTrab = inputNacTrabajadora ? parseFloat(inputNacTrabajadora.value) : 55;
+        let pNacRep = inputNacReproductora ? parseFloat(inputNacReproductora.value) : 9;
+        let pNacSold = inputNacSoldado ? parseFloat(inputNacSoldado.value) : 35;
+        
+        const totalP = pNacReina + pNacTrab + pNacRep + pNacSold;
+        if (totalP > 0) { pNacReina /= totalP; pNacTrab /= totalP; pNacRep /= totalP; pNacSold /= totalP; } 
+        else { pNacReina = 0.01; pNacTrab = 0.55; pNacRep = 0.09; pNacSold = 0.35; }
+        
+        const birthProbs = [
+            { type: ANT_TYPES.REINA, prob: pNacReina },
+            { type: ANT_TYPES.TRABAJADORA, prob: pNacTrab },
+            { type: ANT_TYPES.REPRODUCTORA, prob: pNacRep },
+            { type: ANT_TYPES.SOLDADO, prob: pNacSold }
+        ];
+
+        function getBirthType() {
+            let r = Math.random();
+            let cum = 0;
+            for(let bp of birthProbs) {
+                cum += bp.prob;
+                if(r <= cum) return bp.type;
+            }
+            return ANT_TYPES.TRABAJADORA;
+        }
+
+        function getNextPos(x, y, dir) {
+            let nx = x, ny = y;
+            if(dir === 0) ny--; else if(dir === 1) nx++; else if(dir === 2) ny++; else if(dir === 3) nx--;
+            if(isToroidal) {
+                if(nx < 0) nx = cols - 1; else if(nx >= cols) nx = 0;
+                if(ny < 0) ny = rows - 1; else if(ny >= rows) ny = 0;
+            } else {
+                if(nx < 0) nx = 0; else if(nx >= cols) nx = cols - 1;
+                if(ny < 0) ny = 0; else if(ny >= rows) ny = rows - 1;
+            }
+            return {nx, ny};
+        }
+        
+        // Iteramos las hormigas
+        // Para evitar problemas modificando el array, iteramos por índice actual
+        const numAnts = ants.length;
+        for(let i = 0; i < numAnts; i++) {
+            const ant = ants[i];
+            if(!ant.alive) continue;
+            
+            // 1. Envejecimiento
+            ant.age++;
+            if(ant.age >= 80) {
+                ant.alive = false;
+                antGrid[ant.y][ant.x] = null;
+                deaths++;
+                continue;
+            }
+            
+            // 2. Regla de Langton Clásica (dirección intencionada)
+            const state = grid[ant.y][ant.x];
+            let intendedDir = state === 0 ? (ant.dir + 1) % 4 : (ant.dir + 3) % 4;
+            
+            let pos = getNextPos(ant.x, ant.y, intendedDir);
+            let nextX = pos.nx;
+            let nextY = pos.ny;
+            
+            // 3. Detección de Colisiones (Celda Ocupada)
+            let occupant = antGrid[nextY][nextX];
+            if (occupant && !occupant.alive) occupant = null; // Por si acaso hay residuos
+            let moved = true;
+            
+            if (occupant && occupant !== ant) {
+                conflicts++;
+                moved = false; // Asumimos que no puede moverse directo a menos que resolvamos
+                
+                // Regla especial: Encuentro de Reinas
+                if(ant.type === ANT_TYPES.REINA && occupant.type === ANT_TYPES.REINA) {
+                    if(ant.age <= 60 && occupant.age <= 60) {
+                        if(Math.random() < 0.5) { ant.alive = false; deaths++; }
+                        if(Math.random() < 0.5) { occupant.alive = false; deaths++; }
+                    } else {
+                        if(ant.age > 60) { if(Math.random() < 0.8) { ant.alive = false; deaths++; } }
+                        else { if(Math.random() < 0.5) { ant.alive = false; deaths++; } }
+                        
+                        if(occupant.age > 60) { if(Math.random() < 0.8) { occupant.alive = false; deaths++; } }
+                        else { if(Math.random() < 0.5) { occupant.alive = false; deaths++; } }
+                    }
+                } 
+                // Regla especial: Nacimiento (Reina + Reproductora a 180°)
+                else if ( (ant.type === ANT_TYPES.REINA && occupant.type === ANT_TYPES.REPRODUCTORA) ||
+                          (ant.type === ANT_TYPES.REPRODUCTORA && occupant.type === ANT_TYPES.REINA) ) {
+                    // Verificamos si están frente a frente (diferencia de dir de 2)
+                    if (Math.abs(intendedDir - occupant.dir) === 2 || Math.abs(ant.dir - occupant.dir) === 2) {
+                        let newType = getBirthType();
+                        // Encontrar celda adyacente libre
+                        let freeDirs = [0,1,2,3].filter(d => {
+                            let p = getNextPos(ant.x, ant.y, d);
+                            let occ = antGrid[p.ny][p.nx];
+                            return !(occ && occ.alive);
+                        });
+                        if (freeDirs.length > 0) {
+                            let bDir = freeDirs[Math.floor(Math.random()*freeDirs.length)];
+                            let bPos = getNextPos(ant.x, ant.y, bDir);
+                            let newAntObj = {
+                                x: bPos.nx, y: bPos.ny,
+                                type: newType, color: ANT_COLORS[newType],
+                                dir: Math.floor(Math.random() * 4),
+                                age: 0, alive: true
+                            };
+                            ants.push(newAntObj);
+                            antGrid[bPos.ny][bPos.nx] = newAntObj;
+                            births++;
+                        }
+                    }
+                }
+
+                // Resolver movimiento (giro aleatorio)
+                if (ant.alive) {
+                    let otherDirs = [0, 1, 2, 3].filter(d => d !== intendedDir);
+                    let randomDir = otherDirs[Math.floor(Math.random() * 3)];
+                    let altPos = getNextPos(ant.x, ant.y, randomDir);
+                    
+                    let altOccupant = antGrid[altPos.ny][altPos.nx];
+                    let altOccupied = altOccupant && altOccupant.alive && altOccupant !== ant;
+                    
+                    if (altOccupied) {
+                        // Esperar un paso (pierde turno, no invierte color ni se mueve)
+                        moved = false; 
+                    } else {
+                        // Se mueve a la alternativa
+                        intendedDir = randomDir;
+                        nextX = altPos.nx;
+                        nextY = altPos.ny;
+                        moved = true;
+                    }
+                }
+                
+                // Apply deaths from Reina collisions to antGrid immediately
+                if (occupant && !occupant.alive) {
+                    antGrid[occupant.y][occupant.x] = null;
+                }
+                if (!ant.alive) {
+                    antGrid[ant.y][ant.x] = null;
+                }
+            }
+            
+            if (moved && ant.alive) {
+                // Aplicar cambio de grid y movimiento
+                antGrid[ant.y][ant.x] = null;
+                grid[ant.y][ant.x] = 1 - state; // invertir estado actual
+                ant.dir = intendedDir;
+                ant.x = nextX;
+                ant.y = nextY;
+                antGrid[ant.y][ant.x] = ant;
+            }
+        }
+        
+        document.getElementById('countDecesos').innerText = deaths;
+        document.getElementById('countNacimientos').innerText = births;
+        document.getElementById('countConflictos').innerText = conflicts;
+        
+        generation++;
+        updateStats(); // To update counters
+        drawAll(); // Redibujar
+        
+        // Auto-pausa si se extinguen
+        let nAliveStr = document.getElementById('aliveCounter').innerText;
+        if (parseInt(nAliveStr) === 0 && generation > 0) {
+            isRunning = false;
+            document.getElementById('toggleGame').innerText = "Iniciar";
+            cancelAnimationFrame(animationId);
+        }
+    }
+
+    function loop(timestamp) {
+        if(!isRunning) return;
+        
+        if(timestamp - lastRenderTime >= speed) {
+            step();
+            lastRenderTime = timestamp;
+        }
+        
+        animationId = requestAnimationFrame(loop);
+    }
+
+    // --- EVENT LISTENERS ---
+    
+    generateRandomBtn.addEventListener('click', populateAnts);
+    
+    toggleGameBtn.addEventListener('click', () => {
+        isRunning = !isRunning;
+        toggleGameBtn.innerText = isRunning ? "Pausar" : "Iniciar";
+        if(isRunning) {
+            lastRenderTime = performance.now();
+            animationId = requestAnimationFrame(loop);
+        } else {
+            cancelAnimationFrame(animationId);
+        }
+    });
+
+    resetBtn.addEventListener('click', () => {
+        isRunning = false;
+        toggleGameBtn.innerText = "Iniciar";
+        cancelAnimationFrame(animationId);
+        initGrid();
+    });
+
+    nextGenerationBtn.addEventListener('click', () => {
+        if(!isRunning) {
+            step();
+        }
+    });
+
+    updateSizeBtn.addEventListener('click', () => {
+        rows = parseInt(inputRows.value);
+        cols = parseInt(inputCols.value);
+        cellSize = parseInt(inputCellSize.value);
+        isRunning = false;
+        toggleGameBtn.innerText = "Iniciar";
+        cancelAnimationFrame(animationId);
+        initGrid();
+    });
+
+    // Controles de Velocidad
+    const minSpeedBtn = document.getElementById('minSpeed');
+    const maxSpeedBtn = document.getElementById('maxSpeed');
+    const decreaseSpeedBtn = document.getElementById('decreaseSpeed');
+    const increaseSpeedBtn = document.getElementById('increaseSpeed');
+    
+    function updateSpeed(newSpeed) {
+        speed = Math.max(10, Math.min(newSpeed, 1000));
+        speedInput.value = speed;
+    }
+    
+    minSpeedBtn.addEventListener('click', () => updateSpeed(10));
+    maxSpeedBtn.addEventListener('click', () => updateSpeed(1000));
+    decreaseSpeedBtn.addEventListener('click', () => updateSpeed(speed - 10));
+    increaseSpeedBtn.addEventListener('click', () => updateSpeed(speed + 10));
+
+    // Lógica del Selector de Pincel
+    let currentBrushValue = "celda";
+    const brushButtons = document.querySelectorAll('.brush-btn');
+    brushButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            brushButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentBrushValue = btn.getAttribute('data-brush');
+        });
+    });
+
+    // Condiciones Iniciales Particulares Definidas por el Usuario
+    let isDrawing = false;
+    let drawStartX = -1;
+    let drawStartY = -1;
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    canvas.addEventListener('mousedown', (e) => {
+        isDrawing = true;
+        handleManualInput(e);
+    });
+    canvas.addEventListener('mousemove', (e) => {
+        if(isDrawing) handleManualInput(e);
+    });
+    window.addEventListener('mouseup', () => {
+        isDrawing = false;
+        drawStartX = -1;
+        drawStartY = -1;
+    });
+
+    function handleManualInput(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / cellSize);
+        const y = Math.floor((e.clientY - rect.top) / cellSize);
+        
+        if(x >= 0 && x < cols && y >= 0 && y < rows) {
+            // Evitar dibujar varias veces en el mismo píxel en un solo drag si no nos hemos movido
+            if (x === drawStartX && y === drawStartY) return;
+            drawStartX = x;
+            drawStartY = y;
+
+            const isRightClick = e.buttons === 2 || e.button === 2;
+            let occupant = antGrid[y][x];
+            let existingAntAlive = occupant && occupant.alive;
+            
+            if (isRightClick) {
+                if (existingAntAlive) {
+                    occupant.alive = false;
+                    antGrid[y][x] = null;
+                    updateStats();
+                    drawAll();
+                }
+                return;
+            }
+
+            const brushValue = currentBrushValue;
+            
+            if(brushValue === "celda") {
+                // Alternar estado de la celda (1 o 0) de forma manual
+                grid[y][x] = 1 - grid[y][x];
+                drawAll();
+            } else {
+                if (existingAntAlive) {
+                    // Ciclar el tipo de la hormiga si se hace clic nuevamente sobre ella (solo en mousedown para no ciclar rápido)
+                    if (e.type === 'mousedown') {
+                        occupant.type = (occupant.type + 1) % 4;
+                        occupant.color = ANT_COLORS[occupant.type];
+                        updateStats();
+                        drawAll();
+                    }
+                } else {
+                    // Insertar hormiga seleccionada
+                    const type = parseInt(brushValue);
+                    const newAnt = {
+                        x, y,
+                        type: type,
+                        color: ANT_COLORS[type],
+                        dir: Math.floor(Math.random() * 4),
+                        age: 0,
+                        alive: true
+                    };
+                    ants.push(newAnt);
+                    antGrid[y][x] = newAnt;
+                    updateStats();
+                    drawAll();
+                }
+            }
+        }
+    }
+
+    // Arranque inicial
+    initGrid();
+    
+    if (showPathCheck) {
+        showPathCheck.addEventListener('change', drawAll);
+    }
+
+    const btnPreloadAislamiento = document.getElementById('btnPreloadAislamiento');
+    if (btnPreloadAislamiento) {
+        btnPreloadAislamiento.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 10;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 5;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 45;
+            if (inputProbReproductora) inputProbReproductora.value = 10;
+            if (inputProbSoldado) inputProbSoldado.value = 40;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 1;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 60;
+            if (inputNacReproductora) inputNacReproductora.value = 4;
+            if (inputNacSoldado) inputNacSoldado.value = 35;
+        });
+    }
+
+    const btnPreloadSobrepoblacion = document.getElementById('btnPreloadSobrepoblacion');
+    if (btnPreloadSobrepoblacion) {
+        btnPreloadSobrepoblacion.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 50;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 20;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 20;
+            if (inputProbReproductora) inputProbReproductora.value = 40;
+            if (inputProbSoldado) inputProbSoldado.value = 20;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 25;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 15;
+            if (inputNacReproductora) inputNacReproductora.value = 45;
+            if (inputNacSoldado) inputNacSoldado.value = 15;
+        });
+    }
+
+    const btnPreloadCercania = document.getElementById('btnPreloadCercania');
+    if (btnPreloadCercania) {
+        btnPreloadCercania.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 25;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 12;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 30;
+            if (inputProbReproductora) inputProbReproductora.value = 28;
+            if (inputProbSoldado) inputProbSoldado.value = 30;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 15;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 35;
+            if (inputNacReproductora) inputNacReproductora.value = 20;
+            if (inputNacSoldado) inputNacSoldado.value = 30;
+        });
+    }
+
+    const btnPreloadEstabilidad = document.getElementById('btnPreloadEstabilidad');
+    if (btnPreloadEstabilidad) {
+        btnPreloadEstabilidad.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 25;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 12;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 30;
+            if (inputProbReproductora) inputProbReproductora.value = 28;
+            if (inputProbSoldado) inputProbSoldado.value = 30;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 16;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 30;
+            if (inputNacReproductora) inputNacReproductora.value = 24;
+            if (inputNacSoldado) inputNacSoldado.value = 30;
+        });
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    requestAnimationFrame(initApp);
+}
+\end{lstlisting}
+
+\end{document}

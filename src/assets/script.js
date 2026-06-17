@@ -1,9 +1,18 @@
 console.log("Script cargado: Inicializando Hormiga de Langton...");
 
-window.addEventListener('load', () => {
-    console.log("DOM cargado. Configurando Canvas...");
+function initApp() {
+    console.log("Intentando inicializar...");
     const canvas = document.getElementById('gameCanvas');
-    if(!canvas) return;
+    if(!canvas) {
+        // React hasn't mounted yet — retry
+        requestAnimationFrame(initApp);
+        return;
+    }
+    // Prevent duplicate initialization on HMR
+    if(canvas.dataset.initialized) return;
+    canvas.dataset.initialized = 'true';
+    console.log("DOM listo. Configurando Canvas...");
+
     const ctx = canvas.getContext('2d');
     
     // UI Elements
@@ -40,6 +49,7 @@ window.addEventListener('load', () => {
     
     // Variables globales del simulador
     let grid = []; // 0 = blanco (no visitado), 1 = negro (visitado)
+    let antGrid = []; // partición espacial O(1)
     let ants = [];
     let generation = 0;
     let deaths = 0;
@@ -93,7 +103,18 @@ window.addEventListener('load', () => {
     };
 
     function initGrid() {
-        grid = new Array(rows).fill(0).map(() => new Array(cols).fill(0));
+        grid = [];
+        antGrid = [];
+        for (let y = 0; y < rows; y++) {
+            let row = [];
+            let antRow = [];
+            for (let x = 0; x < cols; x++) {
+                row.push(0);
+                antRow.push(null);
+            }
+            grid.push(row);
+            antGrid.push(antRow);
+        }
         ants = [];
         generation = 0;
         deaths = 0;
@@ -113,6 +134,8 @@ window.addEventListener('load', () => {
     }
 
     function drawAll() {
+        if (!grid || grid.length === 0) return;
+        
         // Dibujar el fondo oscuro y líneas sutiles
         ctx.fillStyle = '#1e1e1e';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -223,7 +246,7 @@ window.addEventListener('load', () => {
         for(let i=0; i<numAnts; i++) {
             const pos = availablePositions[i];
             const type = typesToPlace[i];
-            ants.push({
+            const newAnt = {
                 x: pos.x,
                 y: pos.y,
                 type: type,
@@ -231,7 +254,9 @@ window.addEventListener('load', () => {
                 dir: Math.floor(Math.random() * 4), // 0:Arriba, 1:Derecha, 2:Abajo, 3:Izquierda
                 age: 0,
                 alive: true
-            });
+            };
+            ants.push(newAnt);
+            antGrid[pos.y][pos.x] = newAnt;
         }
         
         updateStats();
@@ -325,6 +350,7 @@ window.addEventListener('load', () => {
             ant.age++;
             if(ant.age >= 80) {
                 ant.alive = false;
+                antGrid[ant.y][ant.x] = null;
                 deaths++;
                 continue;
             }
@@ -338,12 +364,12 @@ window.addEventListener('load', () => {
             let nextY = pos.ny;
             
             // 3. Detección de Colisiones (Celda Ocupada)
-            let occupantIndex = ants.findIndex((a, idx) => a.alive && a.x === nextX && a.y === nextY && idx !== i);
+            let occupant = antGrid[nextY][nextX];
+            if (occupant && !occupant.alive) occupant = null; // Por si acaso hay residuos
             let moved = true;
             
-            if (occupantIndex !== -1) {
+            if (occupant && occupant !== ant) {
                 conflicts++;
-                let occupant = ants[occupantIndex];
                 moved = false; // Asumimos que no puede moverse directo a menos que resolvamos
                 
                 // Regla especial: Encuentro de Reinas
@@ -368,17 +394,20 @@ window.addEventListener('load', () => {
                         // Encontrar celda adyacente libre
                         let freeDirs = [0,1,2,3].filter(d => {
                             let p = getNextPos(ant.x, ant.y, d);
-                            return !ants.some(a => a.alive && a.x === p.nx && a.y === p.ny);
+                            let occ = antGrid[p.ny][p.nx];
+                            return !(occ && occ.alive);
                         });
                         if (freeDirs.length > 0) {
                             let bDir = freeDirs[Math.floor(Math.random()*freeDirs.length)];
                             let bPos = getNextPos(ant.x, ant.y, bDir);
-                            ants.push({
+                            let newAntObj = {
                                 x: bPos.nx, y: bPos.ny,
                                 type: newType, color: ANT_COLORS[newType],
                                 dir: Math.floor(Math.random() * 4),
                                 age: 0, alive: true
-                            });
+                            };
+                            ants.push(newAntObj);
+                            antGrid[bPos.ny][bPos.nx] = newAntObj;
                             births++;
                         }
                     }
@@ -390,7 +419,8 @@ window.addEventListener('load', () => {
                     let randomDir = otherDirs[Math.floor(Math.random() * 3)];
                     let altPos = getNextPos(ant.x, ant.y, randomDir);
                     
-                    let altOccupied = ants.some((a, idx) => a.alive && a.x === altPos.nx && a.y === altPos.ny && idx !== i);
+                    let altOccupant = antGrid[altPos.ny][altPos.nx];
+                    let altOccupied = altOccupant && altOccupant.alive && altOccupant !== ant;
                     
                     if (altOccupied) {
                         // Esperar un paso (pierde turno, no invierte color ni se mueve)
@@ -403,14 +433,24 @@ window.addEventListener('load', () => {
                         moved = true;
                     }
                 }
+                
+                // Apply deaths from Reina collisions to antGrid immediately
+                if (occupant && !occupant.alive) {
+                    antGrid[occupant.y][occupant.x] = null;
+                }
+                if (!ant.alive) {
+                    antGrid[ant.y][ant.x] = null;
+                }
             }
             
             if (moved && ant.alive) {
                 // Aplicar cambio de grid y movimiento
+                antGrid[ant.y][ant.x] = null;
                 grid[ant.y][ant.x] = 1 - state; // invertir estado actual
                 ant.dir = intendedDir;
                 ant.x = nextX;
                 ant.y = nextY;
+                antGrid[ant.y][ant.x] = ant;
             }
         }
         
@@ -539,11 +579,13 @@ window.addEventListener('load', () => {
             drawStartY = y;
 
             const isRightClick = e.buttons === 2 || e.button === 2;
-            const existingAntIndex = ants.findIndex(a => a.x === x && a.y === y && a.alive);
+            let occupant = antGrid[y][x];
+            let existingAntAlive = occupant && occupant.alive;
             
             if (isRightClick) {
-                if (existingAntIndex !== -1) {
-                    ants[existingAntIndex].alive = false;
+                if (existingAntAlive) {
+                    occupant.alive = false;
+                    antGrid[y][x] = null;
                     updateStats();
                     drawAll();
                 }
@@ -557,26 +599,27 @@ window.addEventListener('load', () => {
                 grid[y][x] = 1 - grid[y][x];
                 drawAll();
             } else {
-                if (existingAntIndex !== -1) {
+                if (existingAntAlive) {
                     // Ciclar el tipo de la hormiga si se hace clic nuevamente sobre ella (solo en mousedown para no ciclar rápido)
                     if (e.type === 'mousedown') {
-                        let ant = ants[existingAntIndex];
-                        ant.type = (ant.type + 1) % 4;
-                        ant.color = ANT_COLORS[ant.type];
+                        occupant.type = (occupant.type + 1) % 4;
+                        occupant.color = ANT_COLORS[occupant.type];
                         updateStats();
                         drawAll();
                     }
                 } else {
                     // Insertar hormiga seleccionada
                     const type = parseInt(brushValue);
-                    ants.push({
+                    const newAnt = {
                         x, y,
                         type: type,
                         color: ANT_COLORS[type],
                         dir: Math.floor(Math.random() * 4),
                         age: 0,
                         alive: true
-                    });
+                    };
+                    ants.push(newAnt);
+                    antGrid[y][x] = newAnt;
                     updateStats();
                     drawAll();
                 }
@@ -590,4 +633,112 @@ window.addEventListener('load', () => {
     if (showPathCheck) {
         showPathCheck.addEventListener('change', drawAll);
     }
-});
+
+    const btnPreloadAislamiento = document.getElementById('btnPreloadAislamiento');
+    if (btnPreloadAislamiento) {
+        btnPreloadAislamiento.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 10;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 5;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 45;
+            if (inputProbReproductora) inputProbReproductora.value = 10;
+            if (inputProbSoldado) inputProbSoldado.value = 40;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 1;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 60;
+            if (inputNacReproductora) inputNacReproductora.value = 4;
+            if (inputNacSoldado) inputNacSoldado.value = 35;
+        });
+    }
+
+    const btnPreloadSobrepoblacion = document.getElementById('btnPreloadSobrepoblacion');
+    if (btnPreloadSobrepoblacion) {
+        btnPreloadSobrepoblacion.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 50;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 20;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 20;
+            if (inputProbReproductora) inputProbReproductora.value = 40;
+            if (inputProbSoldado) inputProbSoldado.value = 20;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 25;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 15;
+            if (inputNacReproductora) inputNacReproductora.value = 45;
+            if (inputNacSoldado) inputNacSoldado.value = 15;
+        });
+    }
+
+    const btnPreloadCercania = document.getElementById('btnPreloadCercania');
+    if (btnPreloadCercania) {
+        btnPreloadCercania.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 25;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 12;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 30;
+            if (inputProbReproductora) inputProbReproductora.value = 28;
+            if (inputProbSoldado) inputProbSoldado.value = 30;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 15;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 35;
+            if (inputNacReproductora) inputNacReproductora.value = 20;
+            if (inputNacSoldado) inputNacSoldado.value = 30;
+        });
+    }
+
+    const btnPreloadEstabilidad = document.getElementById('btnPreloadEstabilidad');
+    if (btnPreloadEstabilidad) {
+        btnPreloadEstabilidad.addEventListener('click', () => {
+            // Densidad Inicial
+            if (inputDensidadTotal) inputDensidadTotal.value = 25;
+            
+            // Probabilidades Iniciales
+            if (inputProbReina) inputProbReina.value = 12;
+            if (inputProbTrabajadora) inputProbTrabajadora.value = 30;
+            if (inputProbReproductora) inputProbReproductora.value = 28;
+            if (inputProbSoldado) inputProbSoldado.value = 30;
+            
+            // Probabilidades de Nacimiento
+            const inputNacReina = document.getElementById('inputNacReina');
+            const inputNacTrabajadora = document.getElementById('inputNacTrabajadora');
+            const inputNacReproductora = document.getElementById('inputNacReproductora');
+            const inputNacSoldado = document.getElementById('inputNacSoldado');
+            
+            if (inputNacReina) inputNacReina.value = 16;
+            if (inputNacTrabajadora) inputNacTrabajadora.value = 30;
+            if (inputNacReproductora) inputNacReproductora.value = 24;
+            if (inputNacSoldado) inputNacSoldado.value = 30;
+        });
+    }
+}
+
+// Start initialization (works on first load and Vite HMR reloads)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    // DOM already loaded (common during HMR)
+    requestAnimationFrame(initApp);
+}
